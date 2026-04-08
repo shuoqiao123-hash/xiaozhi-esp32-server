@@ -15,7 +15,7 @@ SEARCH_FROM_RAGFLOW_FUNCTION_DESC = {
     "type": "function",
     "function": {
         "name": "search_from_ragflow",
-        "description": "从知识库中查询信息",
+        "description": "当用户询问无锡或无锡阳山水蜜桃相关知识时，从知识库中查询信息",
         "parameters": {
             "type": "object",
             "properties": {"question": {"type": "string", "description": "查询的问题"}},

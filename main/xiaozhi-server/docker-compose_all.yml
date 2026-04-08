@@ -65,8 +65,8 @@ services:
     restart: always
     networks:
       - default
-    expose:
-      - 3306
+    ports:
+      - "3306:3306"
     volumes:
       - ./mysql/data:/var/lib/mysql
     environment:
@@ -77,8 +77,8 @@ services:
   # redis模块
   xiaozhi-esp32-server-redis:
     image: redis:8.0
-    expose:
-      - 6379
+    ports:
+      - "6379:6379"
     container_name: xiaozhi-esp32-server-redis
     restart: always
     healthcheck:

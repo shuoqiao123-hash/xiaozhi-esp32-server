@@ -91,6 +91,13 @@ async def startToChat(conn: "ConnectionHandler", text):
         return
 
     # 意图未被处理，继续常规聊天流程，使用实际文本内容
+    if not hasattr(conn, "perf_points") or not isinstance(conn.perf_points, dict):
+        conn.perf_points = {}
+    conn.perf_points["chat_start_ms"] = time.time() * 1000
+    conn.logger.bind(tag="PERF").info(
+        f"chat_start: text={actual_text}"
+    )
+
     await send_stt_message(conn, actual_text)
     conn.executor.submit(conn.chat, actual_text)
 

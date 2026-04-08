@@ -120,7 +120,7 @@ async def process_intent_result(
                     response = conn.intent.replyResult(context_prompt, original_text)
                     speak_txt(conn, response)
 
-                conn._submit_to_executor(process_context_result)
+                conn.executor.submit(process_context_result)
                 return True
 
             function_args = {}
@@ -188,7 +188,7 @@ async def process_intent_result(
                             speak_txt(conn, text)
 
             # 将函数执行放在线程池中
-            conn._submit_to_executor(process_function_call)
+            conn.executor.submit(process_function_call)
             return True
         return False
     except json.JSONDecodeError as e:
