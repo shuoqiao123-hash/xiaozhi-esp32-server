@@ -36,6 +36,7 @@ class LLMProvider(LLMProviderBase):
             "messages": dialogue,
             # 开启SDK原生流式
             "stream": True,
+            "enable_thinking": False,
         }
         if self.memory_id != False:
             # 百练memory需要prompt参数

@@ -1,5 +1,6 @@
 import httpx
 import openai
+import time
 from openai.types import CompletionUsage
 from config.logger import setup_logging
 from core.utils.util import check_model_key
@@ -76,7 +77,11 @@ class LLMProvider(LLMProviderBase):
             if value is not None:
                 request_params[key] = value
 
+        llm_connect_start_time = time.perf_counter()
         responses = self.client.chat.completions.create(**request_params)
+        logger.bind(tag=TAG).info(
+            f"OpenAI连接建立耗时: {time.perf_counter() - llm_connect_start_time:.3f}秒"
+        )
 
         is_active = True
         for chunk in responses:
@@ -116,7 +121,11 @@ class LLMProvider(LLMProviderBase):
             if value is not None:
                 request_params[key] = value
 
+        llm_connect_start_time = time.perf_counter()
         stream = self.client.chat.completions.create(**request_params)
+        logger.bind(tag=TAG).info(
+            f"OpenAI连接建立耗时: {time.perf_counter() - llm_connect_start_time:.3f}秒"
+        )
 
         for chunk in stream:
             if getattr(chunk, "choices", None):

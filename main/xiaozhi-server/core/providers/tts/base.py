@@ -5,7 +5,7 @@ import queue
 import asyncio
 import threading
 import traceback
-
+import time
 from core.utils import p3
 from datetime import datetime
 from core.utils import textUtils
@@ -79,6 +79,16 @@ class TTSProviderBase(ABC):
 
     def handle_opus(self, opus_data: bytes):
         logger.bind(tag=TAG).debug(f"推送数据到队列里面帧数～～ {len(opus_data)}")
+        if (
+            self.conn is not None
+            and not getattr(self.conn, "tts_first_audio_logged", False)
+            and getattr(self.conn, "llm_first_token_start_time", None) is None
+            and getattr(self.conn, "llm_first_token_logged_time", None) is not None
+        ):
+            self.conn.logger.bind(tag=TAG).info(
+                f"LLM首个token到TTS首个音频包耗时: {time.perf_counter() - self.conn.llm_first_token_logged_time:.3f}秒"
+            )
+            self.conn.tts_first_audio_logged = True
         self.tts_audio_queue.put((SentenceType.MIDDLE, opus_data, None))
 
     def handle_audio_file(self, file_audio: bytes, text):
@@ -324,6 +334,7 @@ class TTSProviderBase(ABC):
         # 需要上报的文本和音频列表
         enqueue_text = None
         enqueue_audio = []
+        tts_total_start_time = None
         while not self.conn.stop_event.is_set():
             text = None
             try:
@@ -335,6 +346,9 @@ class TTSProviderBase(ABC):
                     if self.conn.stop_event.is_set():
                         break
                     continue
+
+                if tts_total_start_time is None:
+                    tts_total_start_time = time.perf_counter()
 
                 if self.conn.client_abort:
                     logger.bind(tag=TAG).debug("收到打断信号，跳过当前音频数据")
@@ -369,6 +383,12 @@ class TTSProviderBase(ABC):
                     self.conn.loop,
                 )
                 future.result()
+
+                if sentence_type == SentenceType.LAST and tts_total_start_time is not None:
+                    self.conn.logger.bind(tag=TAG).info(
+                        f"TTS处理完成，总耗时: {time.perf_counter() - tts_total_start_time:.3f}秒"
+                    )
+                    tts_total_start_time = None
 
                 # 记录输出和报告
                 if self.conn.max_output_size > 0 and text:

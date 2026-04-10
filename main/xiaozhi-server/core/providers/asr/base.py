@@ -85,6 +85,7 @@ class ASRProviderBase(ABC):
         """并行处理ASR和声纹识别"""
         try:
             total_start_time = time.monotonic()
+            asr_start_time = time.monotonic()
 
             # 准备音频数据
             if conn.audio_format == "pcm":
@@ -115,6 +116,10 @@ class ASRProviderBase(ABC):
             else:
                 asr_result = await asr_task
                 voiceprint_result = None
+
+            conn.logger.bind(tag=TAG).info(
+                f"ASR处理完成，总耗时: {time.monotonic() - asr_start_time:.3f}秒"
+            )
 
             # 记录识别结果 - 检查是否为异常
             if isinstance(asr_result, Exception):
@@ -159,10 +164,6 @@ class ASRProviderBase(ABC):
                 enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
                 content_for_length_check = raw_text
 
-            # 性能监控
-            total_time = time.monotonic() - total_start_time
-            logger.bind(tag=TAG).debug(f"总处理耗时: {total_time:.3f}s")
-
             # 检查文本长度
             text_len, _ = remove_punctuation_and_length(content_for_length_check)
             self.stop_ws_connection()
@@ -172,6 +173,10 @@ class ASRProviderBase(ABC):
                 await startToChat(conn, enhanced_text)
                 audio_snapshot = asr_audio_task.copy()
                 enqueue_asr_report(conn, enhanced_text, audio_snapshot)
+
+            conn.logger.bind(tag=TAG).info(
+                f"ASR链路完成，总耗时: {time.monotonic() - total_start_time:.3f}秒"
+            )
         except Exception as e:
             logger.bind(tag=TAG).error(f"处理语音停止失败: {e}")
             import traceback
