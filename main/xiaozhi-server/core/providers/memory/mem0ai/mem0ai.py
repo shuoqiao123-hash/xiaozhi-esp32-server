@@ -36,40 +36,26 @@ class MemoryProvider(MemoryProviderBase):
             return None
 
         try:
-            # 只保留 mem0 可接受的标准对话消息
+            # Format the content as a message list for mem0
             messages = []
-            valid_roles = {"user", "assistant"}
-
             for message in msgs:
-                if message.role not in valid_roles:
+                if message.role == "system":
                     continue
 
                 content = message.content
-                if not isinstance(content, str):
-                    continue
-
-                content = content.strip()
-                if not content:
-                    continue
 
                 # Extract content from JSON format if present (for ASR with emotion/language tags)
+                # Same logic as in query_memory method
                 try:
-                    if content.startswith("{") and content.endswith("}"):
+                    if content and content.strip().startswith("{") and content.strip().endswith("}"):
                         data = json.loads(content)
-                        if isinstance(data, dict) and isinstance(data.get("content"), str):
-                            content = data["content"].strip()
+                        if "content" in data:
+                            content = data["content"]
                 except (json.JSONDecodeError, KeyError, TypeError):
                     # If parsing fails, use original content
                     pass
 
-                if not content:
-                    continue
-
                 messages.append({"role": message.role, "content": content})
-
-            if len(messages) < 2:
-                logger.bind(tag=TAG).debug("有效记忆消息不足，跳过保存")
-                return None
 
             result = self.client.add(messages, user_id=self.role_id)
             logger.bind(tag=TAG).debug(f"Save memory result: {result}")
