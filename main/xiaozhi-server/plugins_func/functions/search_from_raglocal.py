@@ -30,7 +30,7 @@ def search_from_raglocal(conn: "ConnectionHandler", question=None):
         return ActionResponse(Action.RESPONSE, None, "知识库查询问题不能为空。")
     raglocal_config = conn.config.get("plugins", {}).get("search_from_raglocal", {})
     retriever = LocalKnowledgeRetriever(
-        qdrant_path=raglocal_config.get("qdrant_path", "/root/spanish/main/xiaozhi-server/data/qdrant_storage"),
+        qdrant_path=raglocal_config.get("qdrant_path", "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal"),
         collection_name=raglocal_config.get("collection_name", "knowledge_local"),
         model_path=raglocal_config.get("embedding_model_path", "/root/spanish/main/xiaozhi-server/models/bge-large-zh-v1.5"),
         embedding_dims=int(raglocal_config.get("embedding_model_dims", 1024)),

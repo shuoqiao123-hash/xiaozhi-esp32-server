@@ -283,7 +283,7 @@ class MemoryProvider(MemoryProviderBase):
             memories.sort(key=lambda x: x[0], reverse=True)
             memories_str = "\n".join(f"- {memory[1]}" for memory in memories)
             logger.bind(tag=TAG).info(
-                f"查询本地记忆成功: role_id={self.role_id}, hit_count={len(memories)}, content={memories_str}"
+                f"查询本地记忆成功: role_id={self.role_id}, hit_count={len(memories)}"
             )
             return memories_str
         except Exception as e:
