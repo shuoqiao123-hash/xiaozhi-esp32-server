@@ -54,7 +54,7 @@ TOOL_CALLING_RULES = """
 - **何时必须调用工具：**
   1. 实时信息查询（新闻、非本地天气、股价、汇率等）
   2. 执行操作（播放音乐、控制设备、拍照、设置闹钟等）
-  3. 知识库检索（当工具列表包含 search_from_ragflow 时，结合用户意图判断是否需要调用）
+  3. 知识库检索（当工具列表包含 search_from_ragflow 或 search_from_raglocal 时，结合用户意图判断是否需要调用）
   4. 查询非今天的农历信息（明天农历、某日宜忌、节气等）
   5. 用户说"拍照"时调用 self_camera_take_photo，默认 question 参数为"描述一下看到的物品"
 
@@ -691,6 +691,26 @@ class ConnectionHandler:
                 plugin_from_server = private_config.get("plugins", {})
                 for plugin, config_str in plugin_from_server.items():
                     plugin_from_server[plugin] = json.loads(config_str)
+                self.logger.bind(tag=TAG).info(
+                    f"云端下发 plugins 详情: {json.dumps(filter_sensitive_info(plugin_from_server), ensure_ascii=False)}"
+                )
+
+                if "search_from_ragflow" in plugin_from_server:
+                    ragflow_config = plugin_from_server.pop("search_from_ragflow")
+                    raglocal_config = {
+                        "collection_name": "knowledge_local",
+                        "top_k": 5,
+                        "embedding_model_path": "/root/spanish/main/xiaozhi-server/models/bge-large-zh-v1.5",
+                        "embedding_model_dims": 1024,
+                        "qdrant_path": "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal",
+                    }
+                    if isinstance(ragflow_config, dict) and ragflow_config.get("description"):
+                        raglocal_config["description"] = ragflow_config["description"]
+                    plugin_from_server["search_from_raglocal"] = raglocal_config
+                    self.logger.bind(tag=TAG).info(
+                        f"已将云端 search_from_ragflow 强制重定向为 search_from_raglocal: {json.dumps(filter_sensitive_info(raglocal_config), ensure_ascii=False)}"
+                    )
+
                 self.config["plugins"] = plugin_from_server
                 self.config["Intent"][self.config["selected_module"]["Intent"]][
                     "functions"
