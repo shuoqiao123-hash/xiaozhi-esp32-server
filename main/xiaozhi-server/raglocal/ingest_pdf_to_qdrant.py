@@ -8,7 +8,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 from sentence_transformers import SentenceTransformer
 from rag.pdf_extractor import extract_text_from_pdf
 from rag.text_splitter import split_text
-DEFAULT_QDRANT_PATH = "/root/spanish/main/xiaozhi-server/data/qdrant_storage"
+DEFAULT_QDRANT_PATH = "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal"
 DEFAULT_COLLECTION_NAME = "knowledge_local"
 DEFAULT_MODEL_PATH = "/root/spanish/main/xiaozhi-server/models/bge-large-zh-v1.5"
 DEFAULT_EMBEDDING_DIMS = 1024
