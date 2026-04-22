@@ -35,6 +35,11 @@ class ASRProvider(ASRProviderBase):
         self.correct_table_name = config.get("correct_table_name", "")
         self.output_dir = config.get("output_dir", "tmp/")
         self.delete_audio_file = delete_audio_file
+        
+        # 确保输出目录存在
+        import os
+        os.makedirs(self.output_dir, exist_ok=True)
+        logger.bind(tag=TAG).info(f"音频保存目录: {self.output_dir}")
 
         # 火山引擎ASR配置
         enable_multilingual = config.get("enable_multilingual", False)
@@ -402,7 +407,12 @@ class ASRProvider(ASRProviderBase):
     async def speech_to_text(self, opus_data, session_id, audio_format, artifacts=None):
         result = self.text
         self.text = ""  # 清空text
-        return result, None
+        
+        # 如果有artifacts且包含文件路径，记录保存的音频文件
+        if artifacts and artifacts.file_path:
+            logger.bind(tag=TAG).info(f"音频已保存到: {artifacts.file_path}")
+        
+        return result, artifacts.file_path if artifacts else None
 
     async def close(self):
         """资源清理方法"""

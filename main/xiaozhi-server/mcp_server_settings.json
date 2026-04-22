@@ -51,6 +51,13 @@
         "Authorization": "Bearer YOUR TOKEN"
       },
       "des": "使用Streamable HTTP传输模式，适用于生产环境的Web部署"
+    },
+    "zhipu-web-search-sse": {
+      "url": "https://open.bigmodel.cn/api/mcp-broker/proxy/web-search/mcp",
+      "headers": {
+        "Authorization": "99571db440404f148c18c7c7e11769be.cqpdLGp6YICaufU9"
+      },
+      "transport": "sse"
     }
   }
 }
