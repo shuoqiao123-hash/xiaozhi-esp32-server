@@ -13,7 +13,7 @@ TAG = __name__
 
 
 class LocalBGEEmbedder:
-    """封装本地 bge-large-zh-v1.5 模型，适配 Mem0。"""
+    """封装本地模型，适配 Mem0。"""
 
     def __init__(self, model_path: str, device: str = "cpu", embedding_dims: int = 1024):
         self.model = SentenceTransformer(model_path, device=device)
@@ -48,12 +48,12 @@ class MemoryProvider(MemoryProviderBase):
 
         self.model_path = config.get(
             "embedding_model_path",
-            "/root/spanish/main/xiaozhi-server/models/bge-large-zh-v1.5",
+            "/root/spanish/main/xiaozhi-server/models/bge-m3",
         )
         self.embedding_dims = int(config.get("embedding_model_dims", 1024))
         self.embedding_device = config.get("embedding_device", "cpu")
-        self.qdrant_path = config.get("qdrant_path", "/root/spanish/main/xiaozhi-server/data/qdrant_storage")
-        self.collection_prefix = config.get("collection_prefix", "memories")
+        self.qdrant_path = config.get("qdrant_path", "/root/spanish/main/xiaozhi-server/data/qdrant_storage_m3")
+        self.collection_prefix = config.get("collection_prefix", "memories_m3")
 
         # llm_config = config.get("llm", {})
         llm_provider = config.get("provider", "openai")

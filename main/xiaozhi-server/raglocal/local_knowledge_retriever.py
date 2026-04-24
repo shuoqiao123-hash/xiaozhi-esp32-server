@@ -2,9 +2,9 @@ from typing import List
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from sentence_transformers import SentenceTransformer
-DEFAULT_QDRANT_PATH = "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal"
-DEFAULT_COLLECTION_NAME = "knowledge_local"
-DEFAULT_MODEL_PATH = "/root/spanish/main/xiaozhi-server/models/bge-large-zh-v1.5"
+DEFAULT_QDRANT_PATH = "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal_m3"
+DEFAULT_COLLECTION_NAME = "knowledge_local_m3"
+DEFAULT_MODEL_PATH = "/root/spanish/main/xiaozhi-server/models/bge-m3"
 DEFAULT_EMBEDDING_DIMS = 1024
 DEFAULT_TOP_K = 5
 class LocalKnowledgeRetriever:

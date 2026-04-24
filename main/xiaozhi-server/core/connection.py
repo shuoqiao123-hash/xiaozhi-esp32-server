@@ -698,14 +698,16 @@ class ConnectionHandler:
                 if "search_from_ragflow" in plugin_from_server:
                     ragflow_config = plugin_from_server.pop("search_from_ragflow")
                     raglocal_config = {
-                        "collection_name": "knowledge_local",
+                        "collection_name": "knowledge_local_m3",
                         "top_k": 5,
-                        "embedding_model_path": "/root/spanish/main/xiaozhi-server/models/bge-large-zh-v1.5",
+                        "embedding_model_path": "/root/spanish/main/xiaozhi-server/models/bge-m3",
                         "embedding_model_dims": 1024,
-                        "qdrant_path": "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal",
+                        "qdrant_path": "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal_m3",
                     }
-                    if isinstance(ragflow_config, dict) and ragflow_config.get("description"):
-                        raglocal_config["description"] = ragflow_config["description"]
+                    raglocal_config["description"] = (
+                        "Este método debe llamarse para consultar la base de conocimiento local cuando el usuario haga preguntas relacionadas con el conocimiento español o la base de conocimiento local."
+                        
+                    )
                     plugin_from_server["search_from_raglocal"] = raglocal_config
                     self.logger.bind(tag=TAG).info(
                         f"已将云端 search_from_ragflow 强制重定向为 search_from_raglocal: {json.dumps(filter_sensitive_info(raglocal_config), ensure_ascii=False)}"

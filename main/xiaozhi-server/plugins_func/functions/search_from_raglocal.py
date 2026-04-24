@@ -11,10 +11,10 @@ SEARCH_FROM_RAGLOCAL_FUNCTION_DESC = {
     "type": "function",
     "function": {
         "name": "search_from_raglocal",
-        "description": "当用户询问无锡或本地知识库相关知识时，从本地知识库中查询信息",
+        "description": "Consulta la información de la base de conocimiento local cuando el usuario pregunta sobre el conocimiento relevante de la base de conocimiento española o local",
         "parameters": {
             "type": "object",
-            "properties": {"question": {"type": "string", "description": "查询的问题"}},
+            "properties": {"question": {"type": "string", "description": "Preguntas de consulta"}},
             "required": ["question"],
         },
     },
@@ -28,11 +28,14 @@ def search_from_raglocal(conn: "ConnectionHandler", question=None):
     question = question.strip()
     if not question:
         return ActionResponse(Action.RESPONSE, None, "知识库查询问题不能为空。")
+
+    logger.bind(tag=TAG).info(f"调用本地知识库检索: question={question}")
+
     raglocal_config = conn.config.get("plugins", {}).get("search_from_raglocal", {})
     retriever = LocalKnowledgeRetriever(
-        qdrant_path=raglocal_config.get("qdrant_path", "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal"),
-        collection_name=raglocal_config.get("collection_name", "knowledge_local"),
-        model_path=raglocal_config.get("embedding_model_path", "/root/spanish/main/xiaozhi-server/models/bge-large-zh-v1.5"),
+        qdrant_path=raglocal_config.get("qdrant_path", "/root/spanish/main/xiaozhi-server/data/qdrant_raglocal_m3"),
+        collection_name=raglocal_config.get("collection_name", "knowledge_local_m3"),
+        model_path=raglocal_config.get("embedding_model_path", "/root/spanish/main/xiaozhi-server/models/bge-m3"),
         embedding_dims=int(raglocal_config.get("embedding_model_dims", 1024)),
         top_k=int(raglocal_config.get("top_k", 5)),
     )
