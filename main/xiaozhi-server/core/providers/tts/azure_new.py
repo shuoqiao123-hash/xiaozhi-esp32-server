@@ -365,8 +365,14 @@ class TTSProvider(TTSProviderBase):
                 audio_bytes = asyncio.run(self.text_to_speak(segment_text, None))
                 if audio_bytes:
                     self.tts_audio_queue.put((SentenceType.FIRST, [], segment_text))
-                    self.wav_to_opus_data_audio_raw_stream(audio_bytes, callback=opus_handler)
-                    logger.bind(tag=TAG).info(f"Azure TTS 剩余句子语音生成成功: {segment_text}")
+                    self.wav_to_opus_data_audio_raw_stream(
+                        audio_bytes, callback=opus_handler
+                    )
+                    full_text = "".join(self.tts_text_buff)
+                    self.processed_chars = len(full_text)
+                    logger.bind(tag=TAG).info(
+                        f"Azure TTS 剩余句子语音生成成功: {segment_text}"
+                    )
             except Exception as e:
                 logger.bind(tag=TAG).error(f"Azure TTS 处理剩余文本失败: {e}")
                 break

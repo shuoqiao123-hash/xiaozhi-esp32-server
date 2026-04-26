@@ -48,34 +48,6 @@ EMOJI_List = [
 ]
 
 
-def normalize_prompt_language(language: str) -> str:
-    """将语言代码转换为提示词更容易遵循的自然语言名。"""
-    if not language:
-        return "中文"
-
-    normalized = str(language).strip().lower()
-    language_map = {
-        "zh": "中文",
-        "zh-cn": "中文",
-        "zh_cn": "中文",
-        "cmn": "中文",
-        "es": "西班牙语",
-        "es-es": "西班牙语",
-        "es_es": "西班牙语",
-        "spanish": "西班牙语",
-        "español": "西班牙语",
-        "ar": "阿拉伯语",
-        "ar-sa": "阿拉伯语",
-        "ar_sa": "阿拉伯语",
-        "arabic": "阿拉伯语",
-        "en": "英语",
-        "en-us": "英语",
-        "en_us": "英语",
-        "english": "英语",
-    }
-    return language_map.get(normalized, str(language).strip())
-
-
 class PromptManager:
     """系统提示词管理器，负责管理和更新系统提示词"""
 
@@ -279,17 +251,14 @@ class PromptManager:
                         or ""
                     )
 
-            # 获取TTS选择的语言，转换为提示词更容易理解的自然语言名称
-            language_code = (
+            # 获取TTS选择的语言，默认值为中文
+            language = (
                 self.config.get("TTS", {})
                 .get(self.config.get("selected_module", {}).get("TTS", ""), {})
                 .get("language")
                 or "中文"
             )
-            language = normalize_prompt_language(language_code)
-            self.logger.bind(tag=TAG).debug(
-                f"获取到选择的语言: code={language_code}, normalized={language}"
-            )
+            self.logger.bind(tag=TAG).debug(f"获取到选择的语言: {language}")
 
             # 替换模板变量
             template = Template(self.base_prompt_template)
