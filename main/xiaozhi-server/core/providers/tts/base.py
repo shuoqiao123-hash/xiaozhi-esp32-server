@@ -433,8 +433,13 @@ class TTSProviderBase(ABC):
             segment_text = textUtils.get_string_no_punctuation_or_emoji(
                 segment_text_raw
             )
-            self.processed_chars += len(segment_text_raw)  # 更新已处理字符位置
+            
+            # 首句过短时继续等待后续内容，避免“¡Claro”“Hola”之类单独播报造成停顿
+            if self.is_first_sentence and len(segment_text.strip()) < 20:
+                return None
 
+            self.processed_chars += len(segment_text_raw)  # 更新已处理字符位置
+    
             # 如果是第一句话，在找到第一个逗号后，将标志设置为False
             if self.is_first_sentence:
                 self.is_first_sentence = False
