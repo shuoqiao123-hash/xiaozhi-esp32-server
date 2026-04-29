@@ -435,7 +435,7 @@ class TTSProviderBase(ABC):
             )
             
             # 首句过短时继续等待后续内容，避免“¡Claro”“Hola”之类单独播报造成停顿
-            if self.is_first_sentence and len(segment_text.strip()) < 20:
+            if self.is_first_sentence and len(segment_text.strip()) < 10:
                 return None
 
             self.processed_chars += len(segment_text_raw)  # 更新已处理字符位置

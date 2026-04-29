@@ -20,15 +20,15 @@ TAG = __name__
 WAKEUP_CONFIG = {
     "refresh_time": 10,
     "responses": [
-        "我一直都在呢，有什么我可以帮您的，您请说。",
-        "在的呢，您有什么想法，随时跟我说一声就好。",
-        "来啦来啦，请告诉我吧，别犹豫，尽管说。",
-        "您请说，我正听着，我会认真处理。",
-        "请您讲话，我准备好了，随时为您效劳。",
-        "请您说出指令吧，我在这里等候。",
-        "我认真听着呢，请放心说出您的需求。。",
-        "请问您需要什么帮助？我很乐意协助您。",
-        "我在这里，等候您的指令，请随时下达。",
+        "Siempre estoy aquí, ¿en qué puedo ayudarle? Por favor, dígame.",
+        "Aquí estoy, si tiene alguna idea, dígamela cuando quiera.",
+        "¡Ya voy, ya voy! Por favor, dígame, no lo dude, hable sin reparos.",
+        "Dígame, le estoy escuchando, lo atenderé con seriedad.",
+        "Por favor, hable, estoy listo, a su disposición en todo momento.",
+        "Por favor, déme sus instrucciones, estoy aquí esperando.",
+        "Le escucho atentamente, no dude en expresar sus necesidades.",
+        "¿En qué puedo ayudarle? Estoy encantado de asistirle.",
+        "Estoy aquí, esperando sus instrucciones, puede darlas cuando desee.",
     ],
 }
 
