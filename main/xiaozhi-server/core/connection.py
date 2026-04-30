@@ -182,6 +182,8 @@ class ConnectionHandler:
         self.sentence_id = None
         # 处理TTS响应没有文本返回
         self.tts_MessageText = ""
+        # 记录 ASR 静音结束时间点（毫秒时间戳），用于统计到 TTS 首包耗时
+        self.asr_silence_end_ms = None
 
         # iot相关变量
         self.iot_descriptors = {}

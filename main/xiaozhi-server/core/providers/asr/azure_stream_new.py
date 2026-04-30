@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import TYPE_CHECKING
 
 import azure.cognitiveservices.speech as speechsdk
@@ -129,6 +130,7 @@ class ASRProvider(ASRProviderBase):
         else:
             self.silence_frames += 1
             if self.silence_frames >= self.end_silence_frames:
+                conn.asr_silence_end_ms = int(time.time() * 1000)
                 logger.bind(tag=TAG).info(
                     f"<<< Azure 检测到静音结束，静音帧数={self.silence_frames}，准备结算"
                 )

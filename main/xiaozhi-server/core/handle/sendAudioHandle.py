@@ -1,6 +1,7 @@
 import json
 import time
 import asyncio
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -245,6 +246,21 @@ async def _do_send_audio(conn: "ConnectionHandler", opus_packet, flow_control):
     """
     packet_index = flow_control.get("packet_count", 0)
     sequence = flow_control.get("sequence", 0)
+
+    if packet_index == 0 and opus_packet:
+        sent_ts_ms = int(time.time() * 1000)
+        sent_time = datetime.fromtimestamp(sent_ts_ms / 1000).strftime(
+            "%Y-%m-%d %H:%M:%S.%f"
+        )[:-3]
+        conn.logger.bind(tag=TAG).info(
+            f"TTS第一包音频发送时间点: {sent_time} ({sent_ts_ms})"
+        )
+        if getattr(conn, "asr_silence_end_ms", None):
+            latency_ms = sent_ts_ms - conn.asr_silence_end_ms
+            conn.logger.bind(tag=TAG).info(
+                f"ASR静音结束->TTS首包耗时: {latency_ms}ms"
+            )
+            conn.asr_silence_end_ms = None
 
     if conn.conn_from_mqtt_gateway:
         # 计算时间戳（基于播放位置）
