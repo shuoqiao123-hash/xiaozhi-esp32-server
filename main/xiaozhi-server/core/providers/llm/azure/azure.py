@@ -106,21 +106,9 @@ class LLMProvider(LLMProviderBase):
         return request_params
 
     def _create_stream(self, request_params):
-        extra_body_params = {"enable_thinking": bool(self.thinking)}
+        return self.client.chat.completions.create(**request_params)
 
-        try:
-            return self.client.chat.completions.create(
-                **request_params,
-                extra_body=extra_body_params,
-            )
-        except TypeError as e:
-            if "extra_body" not in str(e):
-                raise
-            logger.bind(tag=TAG).warning(
-                "当前 Azure OpenAI SDK/服务不支持 extra_body，忽略 enable_thinking 参数继续请求"
-            )
-            return self.client.chat.completions.create(**request_params)
-
+        
     def response(self, session_id, dialogue, **kwargs):
         dialogue = self.normalize_dialogue(dialogue)
         trace_id = _perf_trace_id(session_id)

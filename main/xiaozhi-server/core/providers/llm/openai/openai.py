@@ -95,7 +95,7 @@ class LLMProvider(LLMProviderBase):
                 request_params[key] = value
 
         # 【修改点 2 续】单独构建 extra_body，处理非标准参数
-        extra_body_params = {"enable_thinking": bool(self.thinking)}
+        
 
         logger.bind(tag=TAG).info(
             f"性能埋点 trace_id={trace_id} 阶段=LLM请求准备完成 对话条数={len(dialogue)} 工具数=0 耗时={time.perf_counter() - request_build_start:.3f}秒"
@@ -103,7 +103,7 @@ class LLMProvider(LLMProviderBase):
 
         llm_connect_start_time = time.perf_counter()
         # 【修改点 2 续】在 create 方法中传入 extra_body
-        responses = self.client.chat.completions.create(**request_params, extra_body=extra_body_params)
+        responses = self.client.chat.completions.create(**request_params)
         # logger.bind(tag=TAG).info(
         #     f"请求参数: {request_params}, extra_body_params={extra_body_params}"
         # )
@@ -169,7 +169,7 @@ class LLMProvider(LLMProviderBase):
                 request_params[key] = value
 
         # 【修改点 3 续】单独构建 extra_body，处理非标准参数
-        extra_body_params = {"enable_thinking": bool(self.thinking)}
+        
 
         logger.bind(tag=TAG).info(
             f"性能埋点 trace_id={trace_id} 阶段=工具问答LLM请求准备完成 对话条数={len(dialogue)} 工具数={len(functions or [])} 耗时={time.perf_counter() - request_build_start:.3f}秒"
@@ -180,7 +180,7 @@ class LLMProvider(LLMProviderBase):
         #     f"请求参数: {request_params}, extra_body_params={extra_body_params}"
         # )
         # 【修改点 3 续】在 create 方法中传入 extra_body
-        stream = self.client.chat.completions.create(**request_params, extra_body=extra_body_params)
+        stream = self.client.chat.completions.create(**request_params)
         
         stream_ready_time = time.perf_counter()
         logger.bind(tag=TAG).info(
