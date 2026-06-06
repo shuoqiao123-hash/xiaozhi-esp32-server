@@ -30,8 +30,8 @@ class ASRProvider(ASRProviderBase):
         self.output_dir = config.get("output_dir", "tmp/")
         self.final_wait_timeout = float(config.get("final_wait_timeout", 1.5))
         self.partial_result_enabled = bool(config.get("partial_result_enabled", True))
-        self.end_silence_frames = int(config.get("end_silence_frames", 6))
-        self.min_audio_frames = int(config.get("min_audio_frames", 15))
+        self.end_silence_frames = int(config.get("end_silence_frames", 10))
+        self.min_audio_frames = int(config.get("min_audio_frames", 10))
 
         if not self.speech_key:
             raise ValueError("Azure ASR 需要配置 speech_key")
@@ -44,11 +44,18 @@ class ASRProvider(ASRProviderBase):
         self.is_processing = False
         self.text = ""
         self.partial_text = ""
+        self.recognized_text_buffer = ""
+        self.final_text_buffer = ""
+        self.pending_finalize = False
+        self.last_recognized_at = 0.0
+        self.last_partial_at = 0.0
+        self.has_recognized_text = False
         self.done_event = None
         self.loop = None
         self.silence_frames = 0
         self.audio_frame_count = 0
         self._current_conn = None
+        self._cached_audio_replayed = False
 
     async def open_audio_channels(self, conn: "ConnectionHandler"):
         await super().open_audio_channels(conn)
@@ -56,8 +63,15 @@ class ASRProvider(ASRProviderBase):
     def _reset_text_state(self):
         self.text = ""
         self.partial_text = ""
+        self.recognized_text_buffer = ""
+        self.final_text_buffer = ""
+        self.pending_finalize = False
+        self.last_recognized_at = 0.0
+        self.last_partial_at = 0.0
+        self.has_recognized_text = False
         self.silence_frames = 0
         self.audio_frame_count = 0
+        self._cached_audio_replayed = False
 
     def _append_text(self, new_text: str):
         new_text = (new_text or "").strip()
@@ -77,6 +91,30 @@ class ASRProvider(ASRProviderBase):
             return
 
         self.text = f"{old_text} {new_text}".strip()
+
+    def _append_text_to_buffer(self, buffer_text: str, new_text: str):
+        new_text = (new_text or "").strip()
+        buffer_text = (buffer_text or "").strip()
+        if not new_text:
+            return buffer_text
+
+        if not buffer_text:
+            return new_text
+
+        if new_text.startswith(buffer_text):
+            return new_text
+
+        if buffer_text.endswith(new_text):
+            return buffer_text
+
+        return f"{buffer_text} {new_text}".strip()
+
+    def _can_finalize_now(self) -> bool:
+        if not self.pending_finalize:
+            return False
+        if self.has_recognized_text and self.recognized_text_buffer.strip():
+            return True
+        return self.silence_frames >= self.end_silence_frames + 2
 
     async def receive_audio(self, conn: "ConnectionHandler", audio, audio_have_voice):
         if not hasattr(conn, "asr_audio_for_voiceprint"):
@@ -99,6 +137,22 @@ class ASRProvider(ASRProviderBase):
                 ok = await self._start_azure_session(conn)
                 if not ok:
                     return
+
+                if not self._cached_audio_replayed and self.audio_stream:
+                    cached_audio = list(conn.asr_audio[-15:]) if conn.asr_audio else []
+                    if cached_audio:
+                        logger.bind(tag=TAG).debug(
+                            f"Azure 启动后回灌最近音频帧: {len(cached_audio)}"
+                        )
+                        for cached_packet in cached_audio:
+                            try:
+                                pcm_frame = self.decoder.decode(cached_packet, 960)
+                                if pcm_frame:
+                                    self.audio_stream.write(pcm_frame)
+                                    self.audio_frame_count += 1
+                            except Exception as e:
+                                logger.bind(tag=TAG).debug(f"回灌最近音频失败: {e}")
+                    self._cached_audio_replayed = True
 
         if self.is_processing and audio:
             try:
@@ -127,14 +181,21 @@ class ASRProvider(ASRProviderBase):
 
         if audio_have_voice:
             self.silence_frames = 0
+            self.pending_finalize = False
         else:
             self.silence_frames += 1
             if self.silence_frames >= self.end_silence_frames:
-                conn.asr_silence_end_ms = int(time.time() * 1000)
-                logger.bind(tag=TAG).info(
-                    f"<<< Azure 检测到静音结束，静音帧数={self.silence_frames}，准备结算"
-                )
-                await self._finalize_current_utterance(conn)
+                if not self.pending_finalize:
+                    self.pending_finalize = True
+                    logger.bind(tag=TAG).info(
+                        f"<<< Azure 检测到静音候选结束，静音帧数={self.silence_frames}，等待二次确认"
+                    )
+                elif self._can_finalize_now():
+                    conn.asr_silence_end_ms = int(time.time() * 1000)
+                    logger.bind(tag=TAG).info(
+                        f"<<< Azure 检测到静音结束，静音帧数={self.silence_frames}，准备结算"
+                    )
+                    await self._finalize_current_utterance(conn)
 
     async def _start_azure_session(self, conn: "ConnectionHandler") -> bool:
         if self.is_processing:
@@ -184,6 +245,7 @@ class ASRProvider(ASRProviderBase):
                         partial = (evt.result.text or "").strip()
                         if partial:
                             self.partial_text = partial
+                            self.last_partial_at = time.time()
                             logger.bind(tag=TAG).debug(f"Azure 中间结果: {partial}")
                 except Exception as e:
                     logger.bind(tag=TAG).debug(f"处理Azure中间结果失败: {e}")
@@ -193,7 +255,12 @@ class ASRProvider(ASRProviderBase):
                     if evt.result.reason == speechsdk.ResultReason.RecognizedSpeech:
                         recognized_text = (evt.result.text or "").strip()
                         if recognized_text:
-                            self._append_text(recognized_text)
+                            self.recognized_text_buffer = self._append_text_to_buffer(
+                                self.recognized_text_buffer, recognized_text
+                            )
+                            self.text = self.recognized_text_buffer
+                            self.last_recognized_at = time.time()
+                            self.has_recognized_text = bool(self.recognized_text_buffer.strip())
                             logger.bind(tag=TAG).debug(f"Azure 最终片段识别: {recognized_text}")
                     elif evt.result.reason == speechsdk.ResultReason.NoMatch:
                         logger.bind(tag=TAG).info("Azure 未匹配到有效语音")
@@ -261,6 +328,9 @@ class ASRProvider(ASRProviderBase):
             await self.handle_voice_stop(conn, conn.asr_audio_for_voiceprint)
 
         conn.asr_audio_for_voiceprint = []
+        self._cached_audio_replayed = False
+        if hasattr(conn, "abort_audio_cache"):
+            conn.abort_audio_cache.clear()
         conn.reset_audio_states()
 
     async def _stop_azure_session(self):
@@ -289,7 +359,8 @@ class ASRProvider(ASRProviderBase):
         except Exception as e:
             logger.bind(tag=TAG).error(f"关闭 Azure 会话时出错: {e}", exc_info=True)
         finally:
-            final_text = self.text or self.partial_text or ""
+            final_text = self.recognized_text_buffer.strip() or self.partial_text.strip() or ""
+            self.final_text_buffer = final_text
             self.text = final_text
             logger.bind(tag=TAG).info(
                 f"Azure 会话已关闭，最终文本: {final_text}，写入帧数: {self.audio_frame_count}"
@@ -324,8 +395,11 @@ class ASRProvider(ASRProviderBase):
         audio_format="opus",
         artifacts=None,
     ):
-        result = self.text
+        result = self.final_text_buffer.strip()
+        self.final_text_buffer = result
         self.text = ""
+        self.partial_text = ""
+        self.pending_finalize = False
         return result, None
 
     def stop_ws_connection(self):

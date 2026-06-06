@@ -17,6 +17,10 @@ TAG = __name__
 async def handleAudioMessage(conn: "ConnectionHandler", audio):
     # 当前片段是否有人说话
     have_voice = conn.vad.is_vad(conn, audio)
+    if audio:
+        conn.asr_audio.append(audio)
+        if len(conn.asr_audio) > 20:
+            conn.asr_audio = conn.asr_audio[-20:]
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
     if hasattr(conn, "just_woken_up") and conn.just_woken_up:
         have_voice = False
@@ -26,7 +30,7 @@ async def handleAudioMessage(conn: "ConnectionHandler", audio):
         return
     # manual 模式下不打断正在播放的内容
     if have_voice:
-        if conn.client_is_speaking and conn.client_listen_mode != "manual":
+        if  conn.client_listen_mode != "manual":
             await handleAbortMessage(conn)
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)

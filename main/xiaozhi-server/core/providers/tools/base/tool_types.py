@@ -12,6 +12,7 @@ class ToolType(Enum):
 
     SERVER_PLUGIN = "server_plugin"  # 服务端插件
     SERVER_MCP = "server_mcp"  # 服务端MCP
+    SERVER_WEB_SEARCH = "server_web_search"  # 服务端Web搜索
     DEVICE_IOT = "device_iot"  # 设备端IoT
     DEVICE_MCP = "device_mcp"  # 设备端MCP
     MCP_ENDPOINT = "mcp_endpoint"  # MCP接入点

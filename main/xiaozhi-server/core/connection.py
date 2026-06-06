@@ -167,6 +167,7 @@ class ConnectionHandler:
         # 所以涉及到ASR的变量，需要在这里定义，属于connection的私有变量
         self.asr_audio = []
         self.asr_audio_queue = queue.Queue()
+        self.abort_audio_cache = deque(maxlen=6)
         self.current_speaker = None  # 存储当前说话人
 
         # llm相关变量

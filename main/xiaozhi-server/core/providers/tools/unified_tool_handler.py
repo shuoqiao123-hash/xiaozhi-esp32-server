@@ -9,6 +9,7 @@ from .base import ToolType
 from plugins_func.register import Action, ActionResponse
 from .unified_tool_manager import ToolManager
 from .server_plugins import ServerPluginExecutor
+from .server_web_search import WebSearchExecutor
 from .server_mcp import ServerMCPExecutor
 from .device_iot import DeviceIoTExecutor
 from .device_mcp import DeviceMCPExecutor
@@ -28,6 +29,7 @@ class UnifiedToolHandler:
 
         # 创建各类执行器
         self.server_plugin_executor = ServerPluginExecutor(conn)
+        self.web_search_executor = WebSearchExecutor(conn)
         self.server_mcp_executor = ServerMCPExecutor(conn)
         self.device_iot_executor = DeviceIoTExecutor(conn)
         self.device_mcp_executor = DeviceMCPExecutor(conn)
@@ -36,6 +38,9 @@ class UnifiedToolHandler:
         # 注册执行器
         self.tool_manager.register_executor(
             ToolType.SERVER_PLUGIN, self.server_plugin_executor
+        )
+        self.tool_manager.register_executor(
+            ToolType.SERVER_WEB_SEARCH, self.web_search_executor
         )
         self.tool_manager.register_executor(
             ToolType.SERVER_MCP, self.server_mcp_executor

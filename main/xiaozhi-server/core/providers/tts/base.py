@@ -54,10 +54,6 @@ class TTSProviderBase(ABC):
             "：",
         )
         self.first_sentence_punctuations = (
-            "，",
-            "~",
-            "、",
-            ",",
             "。",
             "？",
             "?",
@@ -79,6 +75,9 @@ class TTSProviderBase(ABC):
 
     def handle_opus(self, opus_data: bytes):
         logger.bind(tag=TAG).debug(f"推送数据到队列里面帧数～～ {len(opus_data)}")
+        if self.conn is not None and getattr(self.conn, "perf_points", None) is not None:
+            if "tts_first_packet_generated_ms" not in self.conn.perf_points:
+                self.conn.perf_points["tts_first_packet_generated_ms"] = int(time.time() * 1000)
         if (
             self.conn is not None
             and not getattr(self.conn, "tts_first_audio_logged", False)
