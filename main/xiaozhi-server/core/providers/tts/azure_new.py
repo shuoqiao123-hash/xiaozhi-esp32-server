@@ -20,15 +20,18 @@ logger = setup_logging()
 
 
 def _extract_locale(voice_name: str, fallback: str = "zh-CN") -> str:
+    # 从语音名提取区域 / Extract locale from voice name
     m = re.match(r"([a-zA-Z]{2,4}-[a-zA-Z]{2,4})", voice_name or "")
     return m.group(1) if m else fallback
 
 
 def _escape_ssml_text(text: str) -> str:
+    # 转义SSML文本 / Escape SSML text
     return html.escape(text or "", quote=False)
 
 
 def _normalize_rate(rate_value: int | float | str | None) -> str:
+     # 规范语速值 / Normalize rate value
     if rate_value in (None, "", 0, "0"):
         return "-10%"
     try:
@@ -41,6 +44,7 @@ def _normalize_rate(rate_value: int | float | str | None) -> str:
 
 
 def _normalize_pitch(pitch_value: int | float | str | None) -> str:
+    # 规范音调值 / Normalize pitch value
     if pitch_value in (None, "", 0, "0"):
         return "0Hz"
     try:
@@ -53,6 +57,7 @@ def _normalize_pitch(pitch_value: int | float | str | None) -> str:
 
 
 def _build_ssml(text: str, voice_name: str, rate: str = "0%", pitch: str = "0Hz", style: str | None = None) -> str:
+     # 构建SSML请求 / Build SSML request
     locale = _extract_locale(voice_name, fallback="zh-CN")
     escaped_text = _escape_ssml_text(text)
 
@@ -84,6 +89,7 @@ class TTSProvider(TTSProviderBase):
         self.interface_type = InterfaceType.DUAL_STREAM
         self.audio_file_type = "wav"
 
+        # 读取配置 / Read config
         self.speech_key = config.get("speech_key") or config.get("api_key")
         self.service_region = config.get("service_region") or config.get("region")
         self.voice_name = (
@@ -100,7 +106,8 @@ class TTSProvider(TTSProviderBase):
         self.enable_ws_reuse = False
         self.activate_session = False
         self.report_on_last = False
-
+        
+        # 音频参数 / Audio params
         self.audio_params = {
             "speech_rate": -10,
             "pitch": 0,
@@ -123,7 +130,8 @@ class TTSProvider(TTSProviderBase):
                     config["ttsPitch"], min_val=-12, max_val=12, base_val=0
                 )
             )
-
+        
+        # 校验key / Validate key
         model_key_msg = check_model_key("TTS", self.speech_key)
         if model_key_msg:
             logger.bind(tag=TAG).error(model_key_msg)
@@ -146,6 +154,7 @@ class TTSProvider(TTSProviderBase):
         )
 
     def _build_speech_config(self):
+        # 构建SpeechConfig / Build SpeechConfig
         speech_config = speechsdk.SpeechConfig(
             subscription=self.speech_key,
             region=self.service_region,
@@ -157,6 +166,7 @@ class TTSProvider(TTSProviderBase):
         return speech_config
 
     def _synthesize_segment_sync(self, text: str) -> bytes:
+        # 同步合成单段文本 / Synchronously synthesize one segment
         speech_config = self._build_speech_config()
         synthesizer = speechsdk.SpeechSynthesizer(
             speech_config=speech_config,
@@ -188,6 +198,7 @@ class TTSProvider(TTSProviderBase):
         raise RuntimeError(f"Azure TTS 合成失败，未知原因: reason={result.reason}")
 
     async def text_to_speak(self, text, output_file):
+        # 异步文本转语音（支持文件输出或返回bytes） / Async TTS (file or bytes)
         filtered_text = MarkdownCleaner.clean_markdown(text or "").strip()
         if not filtered_text:
             logger.bind(tag=TAG).debug("Azure TTS 收到空文本，跳过合成")
@@ -217,6 +228,7 @@ class TTSProvider(TTSProviderBase):
             raise RuntimeError(f"Azure TTS synthesis failed: {e}")
 
     def tts_text_priority_thread(self):
+        # 文本处理线程主循环 / Main loop of text processing thread
         while not self.conn.stop_event.is_set():
             try:
                 message = self.tts_text_queue.get(timeout=1)
@@ -226,7 +238,8 @@ class TTSProvider(TTSProviderBase):
 
                 if message.sentence_type == SentenceType.FIRST:
                     self.conn.client_abort = False
-
+                
+                # 处理打断 / Handle interruption
                 if self.conn.client_abort:
                     logger.bind(tag=TAG).info("收到打断信息，终止 Azure TTS 文本处理")
                     self.activate_session = False
@@ -234,7 +247,8 @@ class TTSProvider(TTSProviderBase):
                     self.processed_chars = 0
                     self.is_first_sentence = True
                     continue
-
+                
+                # 初始化新会话 / Initialize new session
                 if message.sentence_type == SentenceType.FIRST:
                     self.tts_stop_request = False
                     self.processed_chars = 0
@@ -253,8 +267,9 @@ class TTSProvider(TTSProviderBase):
                     except Exception as e:
                         logger.bind(tag=TAG).error(f"Azure TTS 启动会话失败: {e}")
                         continue
-
+                
                 elif ContentType.TEXT == message.content_type:
+                    # 处理文本内容 / Process text content
                     self.tts_text_buff.append(message.content_detail or "")
                     segment_text = self._get_segment_text()
                     while segment_text:
@@ -276,6 +291,7 @@ class TTSProvider(TTSProviderBase):
                         segment_text = self._get_segment_text()
 
                 elif ContentType.FILE == message.content_type:
+                    # 处理文件内容 / Process file content
                     self._process_remaining_text_stream(opus_handler=self.handle_opus)
                     if message.content_file and os.path.exists(message.content_file):
                         logger.bind(tag=TAG).info(
@@ -289,6 +305,7 @@ class TTSProvider(TTSProviderBase):
                         )
 
                 if message.sentence_type == SentenceType.LAST:
+                    # 结束会话 / Finish session
                     try:
                         self.tts_stop_request = True
                         self._process_remaining_text_stream(opus_handler=self.handle_opus)
@@ -312,6 +329,7 @@ class TTSProvider(TTSProviderBase):
                 continue
 
     async def _stream_segment(self, text: str):
+        # 异步合成一段并流式输出 / Synthesize segment and stream
         if not text or not text.strip():
             return
 
@@ -337,26 +355,31 @@ class TTSProvider(TTSProviderBase):
         logger.bind(tag=TAG).info(f"Azure TTS 句子语音生成成功: {text}")
 
     async def start_session(self, session_id):
+        # 开始会话 / Start session
         logger.bind(tag=TAG).debug(f"Azure TTS 开始会话: {session_id}")
         self.activate_session = True
 
     async def finish_session(self, session_id):
+        # 结束会话 / Finish session
         logger.bind(tag=TAG).debug(f"Azure TTS 结束会话: {session_id}")
         self.activate_session = False
         self.tts_audio_queue.put((SentenceType.LAST, [], None))
 
     async def close(self):
+        # 关闭资源 / Close resources
         logger.bind(tag=TAG).info("Azure TTS 开始关闭资源")
         self.activate_session = False
 
     def wav_to_opus_data_audio_raw_stream(
         self, raw_data_var, is_end=False, callback=None
     ):
+        # 将WAV转换为Opus流 / Convert WAV to Opus stream
         return self.opus_encoder.encode_pcm_to_opus_stream(
             raw_data_var, is_end, callback=callback
         )
 
     def _process_remaining_text_stream(self, opus_handler=None):
+        # 处理缓冲区剩余文本 / Process remaining text in buffer
         self.tts_stop_request = True
         segment_text = self._get_segment_text()
         while segment_text:

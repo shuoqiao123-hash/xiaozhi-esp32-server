@@ -38,7 +38,7 @@ class VADProvider(VADProviderBase):
         self.frame_window_threshold = 3
 
     def _init_connection_state(self, conn):
-        """为连接初始化独立的 VAD 状态"""
+        """为连接初始化独立的 VAD 状态 / Initialize independent VAD state for the connection."""
         if not hasattr(conn, "_vad_opus_decoder"):
             conn._vad_opus_decoder = opuslib_next.Decoder(16000, 1)
         if not hasattr(conn, "_vad_state"):
@@ -47,7 +47,7 @@ class VADProvider(VADProviderBase):
             conn._vad_context = np.zeros((1, 64), dtype=np.float32)
 
     def release_conn_resources(self, conn):
-        """释放连接的 VAD 资源（连接关闭时调用）"""
+        """释放连接的 VAD 资源（连接关闭时调用）/ Release VAD resources of the connection (called when connection closed)."""
         for attr in ("_vad_opus_decoder", "_vad_state", "_vad_context"):
             if hasattr(conn, attr):
                 try:
@@ -56,7 +56,7 @@ class VADProvider(VADProviderBase):
                     pass
 
     def is_vad(self, conn, opus_packet):
-        # 手动模式：直接返回True，不进行实时VAD检测，所有音频都缓存
+        # 手动模式：直接返回True，不进行实时VAD检测，所有音频都缓存 / Manual mode: return True directly, skip real-time VAD, cache all audio.
         if conn.client_listen_mode == "manual":
             return True
 
@@ -88,7 +88,7 @@ class VADProvider(VADProviderBase):
                 conn._vad_context = audio_input[:, -64:]
                 speech_prob = out.item()
 
-                # 双阈值判断
+                # 双阈值判断 / Dual-threshold judgment.
                 if speech_prob >= self.vad_threshold:
                     is_voice = True
                 elif speech_prob <= self.vad_threshold_low:
@@ -96,16 +96,16 @@ class VADProvider(VADProviderBase):
                 else:
                     is_voice = conn.last_is_voice
 
-                # 声音没低于最低值则延续前一个状态，判断为有声音
+                # 声音没低于最低值则延续前一个状态，判断为有声音 / If speech probability is not below low threshold, keep previous state as voice.
                 conn.last_is_voice = is_voice
 
-                # 更新滑动窗口
+                # 更新滑动窗口 / Update sliding window.
                 conn.client_voice_window.append(is_voice)
                 client_have_voice = (
                     conn.client_voice_window.count(True) >= self.frame_window_threshold
                 )
 
-                # 如果之前有声音，但本次没有声音，且与上次有声音的时间差已经超过了静默阈值，则认为已经说完一句话
+                # 如果之前有声音，但本次没有声音，且与上次有声音的时间差已经超过了静默阈值，则认为已经说完一句话 / If previously had voice but now no voice, and silence duration exceeds threshold, consider utterance ended.
                 if conn.client_have_voice and not client_have_voice:
                     stop_duration = time.time() * 1000 - conn.last_activity_time
                     if stop_duration >= self.silence_threshold_ms:

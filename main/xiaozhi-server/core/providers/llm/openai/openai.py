@@ -12,11 +12,13 @@ logger = setup_logging()
 
 
 def _perf_trace_id(session_id):
+    """生成性能追踪ID / Generate trace ID for performance tracking."""
     return session_id or uuid.uuid4().hex[:8]
 
 
 class LLMProvider(LLMProviderBase):
     def __init__(self, config):
+        # 初始化模型、API密钥和基础URL / Init model, API key and base URL
         self.model_name = config.get("model_name")
         self.api_key = config.get("api_key")
         if "base_url" in config:
@@ -25,7 +27,8 @@ class LLMProvider(LLMProviderBase):
             self.base_url = config.get("url")
         timeout = config.get("timeout", 300)
         self.timeout = int(timeout) if timeout else 300
-
+        
+        # 默认推理参数（最大token、温度、top_p、频率惩罚）/ Default inference params
         param_defaults = {
             "max_tokens": int,
             "temperature": lambda x: round(float(x), 1),
@@ -48,12 +51,13 @@ class LLMProvider(LLMProviderBase):
         logger.debug(
             f"意图识别参数初始化: {self.temperature}, {self.max_tokens}, {self.top_p}, {self.frequency_penalty}"
         )
-
+        
+        # 校验API Key / Validate API key
         model_key_msg = check_model_key("LLM", self.api_key)
         if model_key_msg:
             logger.bind(tag=TAG).error(model_key_msg)
-            
-        # 【修改点 1】移除初始化里的 extra_body，它不能放在这里
+        
+        # 初始化OpenAI客户端，设置超时 / Init OpenAI client with timeout    
         self.client = openai.OpenAI(
             api_key=self.api_key, 
             base_url=self.base_url, 
@@ -65,16 +69,21 @@ class LLMProvider(LLMProviderBase):
 
     @staticmethod
     def normalize_dialogue(dialogue):
-        """自动修复 dialogue 中缺失 content 的消息"""
+        """自动修复缺失content的消息 / Auto-fill missing 'content' fields."""
         for msg in dialogue:
             if "role" in msg and "content" not in msg:
                 msg["content"] = ""
         return dialogue
 
     def response(self, session_id, dialogue, **kwargs):
+        """
+        普通问答流式响应（无工具），逐词生成。
+        Stream normal chat completion (without tools), yield tokens.
+        """
         dialogue = self.normalize_dialogue(dialogue)
         trace_id = _perf_trace_id(session_id)
-
+        
+        # 构建请求参数 / Build request params
         request_build_start = time.perf_counter()
         request_params = {
             "model": self.model_name,
@@ -82,7 +91,6 @@ class LLMProvider(LLMProviderBase):
             "stream": True,
         }
 
-        # 【修改点 2】从 optional_params 中移除 thinking
         optional_params = {
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "temperature": kwargs.get("temperature", self.temperature),
@@ -94,19 +102,13 @@ class LLMProvider(LLMProviderBase):
             if value is not None:
                 request_params[key] = value
 
-        # 【修改点 2 续】单独构建 extra_body，处理非标准参数
-        
-
         logger.bind(tag=TAG).info(
             f"性能埋点 trace_id={trace_id} 阶段=LLM请求准备完成 对话条数={len(dialogue)} 工具数=0 耗时={time.perf_counter() - request_build_start:.3f}秒"
         )
-
+        
+        # 发起请求，记录首包耗时 / Send request, log first-packet latency
         llm_connect_start_time = time.perf_counter()
-        # 【修改点 2 续】在 create 方法中传入 extra_body
         responses = self.client.chat.completions.create(**request_params)
-        # logger.bind(tag=TAG).info(
-        #     f"请求参数: {request_params}, extra_body_params={extra_body_params}"
-        # )
         stream_ready_time = time.perf_counter()
         logger.bind(tag=TAG).info(
             f"性能埋点 trace_id={trace_id} 阶段=普通问答LLM流返回 耗时={stream_ready_time - llm_connect_start_time:.3f}秒"
@@ -117,6 +119,7 @@ class LLMProvider(LLMProviderBase):
         first_token_start = stream_ready_time
         first_sentence_logged = False
         sentence_buffer = ""
+        # 解析流式块，根据💭/out标记切换输出 / Parse chunks, toggle output via 💭/out markers
         for chunk in responses:
             try:
                 delta = chunk.choices[0].delta if getattr(chunk, "choices", None) else None
@@ -124,6 +127,7 @@ class LLMProvider(LLMProviderBase):
             except IndexError:
                 content = ""
             if content:
+                # 切换输出状态 / Toggle output state
                 if "💭" in content:
                     is_active = False
                     content = content.split("💭")[0]
@@ -131,6 +135,7 @@ class LLMProvider(LLMProviderBase):
                     is_active = True
                     content = content.split("out")[-1]
                 if is_active:
+                    # 记录首Token和首句完成 / Log first token and first sentence
                     if content and not first_token_logged:
                         logger.bind(tag=TAG).info(
                             f"性能埋点 trace_id={trace_id} 阶段=普通问答首Token 耗时={time.perf_counter() - first_token_start:.3f}秒"
@@ -145,9 +150,14 @@ class LLMProvider(LLMProviderBase):
                     yield content
 
     def response_with_functions(self, session_id, dialogue, functions=None, **kwargs):
+        """
+        工具/函数调用流式响应，返回(content, tool_calls)元组。
+        Stream chat with tool/function calling, yield (content, tool_calls).
+        """
         dialogue = self.normalize_dialogue(dialogue)
         trace_id = _perf_trace_id(session_id)
-
+        
+        # 构建带tools的请求 / Build request with tools
         request_build_start = time.perf_counter()
         request_params = {
             "model": self.model_name,
@@ -156,7 +166,6 @@ class LLMProvider(LLMProviderBase):
             "tools": functions,
         }
 
-        # 【修改点 3】从 optional_params 中移除 thinking
         optional_params = {
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "temperature": kwargs.get("temperature", self.temperature),
@@ -166,20 +175,14 @@ class LLMProvider(LLMProviderBase):
 
         for key, value in optional_params.items():
             if value is not None:
-                request_params[key] = value
-
-        # 【修改点 3 续】单独构建 extra_body，处理非标准参数
-        
+                request_params[key] = value   
 
         logger.bind(tag=TAG).info(
             f"性能埋点 trace_id={trace_id} 阶段=工具问答LLM请求准备完成 对话条数={len(dialogue)} 工具数={len(functions or [])} 耗时={time.perf_counter() - request_build_start:.3f}秒"
         )
-
+        
+        # 发起请求 / Send request
         llm_connect_start_time = time.perf_counter()
-        # logger.bind(tag=TAG).info(
-        #     f"请求参数: {request_params}, extra_body_params={extra_body_params}"
-        # )
-        # 【修改点 3 续】在 create 方法中传入 extra_body
         stream = self.client.chat.completions.create(**request_params)
         
         stream_ready_time = time.perf_counter()
@@ -191,6 +194,7 @@ class LLMProvider(LLMProviderBase):
         first_token_start = stream_ready_time
         first_sentence_logged = False
         sentence_buffer = ""
+        # 处理流式响应，可能含内容和工具调用 / Process stream, possibly content and tool_calls
         for chunk in stream:
             if getattr(chunk, "choices", None):
                 delta = chunk.choices[0].delta
@@ -209,6 +213,7 @@ class LLMProvider(LLMProviderBase):
                         )
                         first_sentence_logged = True
                 yield content, tool_calls
+            # 记录token消耗 / Log token usage
             elif isinstance(getattr(chunk, "usage", None), CompletionUsage):
                 usage_info = getattr(chunk, "usage", None)
                 logger.bind(tag=TAG).info(

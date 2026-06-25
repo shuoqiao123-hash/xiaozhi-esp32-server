@@ -1,7 +1,6 @@
 import time
 import json
 import asyncio
-from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,14 +12,11 @@ from core.utils.output_counter import check_device_output_limit
 from core.handle.sendAudioHandle import send_stt_message, SentenceType
 
 TAG = __name__
-ABORT_AUDIO_CACHE_SIZE = 15
-ABORT_VOICE_CONFIRM_FRAMES = 2
-ABORT_VOICE_CONFIRM_WINDOW_MS = 180
+
 
 async def handleAudioMessage(conn: "ConnectionHandler", audio):
     # 当前片段是否有人说话
     have_voice = conn.vad.is_vad(conn, audio)
-    now_ms = int(time.time() * 1000)
 
     if audio:
         conn.asr_audio.append(audio)
@@ -37,40 +33,15 @@ async def handleAudioMessage(conn: "ConnectionHandler", audio):
 
     # manual 模式下不打断正在播放的内容
     if have_voice:
-        if _should_trigger_abort(conn, now_ms):
-            _cache_abort_audio(conn, audio)
-            await handleAbortMessage(conn)
-    else:
-        _reset_abort_voice_state(conn)
+        if  conn.client_is_speaking and conn.client_listen_mode != "manual":
+           await handleAbortMessage(conn)
+    
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)
     # 接收音频
     await conn.asr.receive_audio(conn, audio, have_voice)
 
-def _should_trigger_abort(conn: "ConnectionHandler", now_ms: int) -> bool:
-    if conn.client_listen_mode == "manual":
-        return False
-    if not hasattr(conn, "abort_voice_hit_count"):
-        conn.abort_voice_hit_count = 0
-        conn.abort_voice_last_ms = 0
-    last_ms = getattr(conn, "abort_voice_last_ms", 0)
-    if last_ms <= 0 or now_ms - last_ms > ABORT_VOICE_CONFIRM_WINDOW_MS:
-        conn.abort_voice_hit_count = 1
-    else:
-        conn.abort_voice_hit_count += 1
-    conn.abort_voice_last_ms = now_ms
-    return conn.abort_voice_hit_count >= ABORT_VOICE_CONFIRM_FRAMES
-def _reset_abort_voice_state(conn: "ConnectionHandler"):
-    conn.abort_voice_hit_count = 0
-    conn.abort_voice_last_ms = 0
-def _cache_abort_audio(conn: "ConnectionHandler", audio: bytes):
-    if not hasattr(conn, "abort_audio_cache") or conn.abort_audio_cache is None:
-        conn.abort_audio_cache = deque(maxlen=ABORT_AUDIO_CACHE_SIZE)
-    if audio:
-        conn.abort_audio_cache.append(audio)
-    recent_audio = conn.asr_audio[-ABORT_AUDIO_CACHE_SIZE:]
-    for packet in recent_audio:
-        conn.abort_audio_cache.append(packet)
+
 
 async def resume_vad_detection(conn: "ConnectionHandler"):
     # 等待2秒后恢复VAD检测
