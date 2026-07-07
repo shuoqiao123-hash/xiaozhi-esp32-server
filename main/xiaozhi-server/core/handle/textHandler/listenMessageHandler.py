@@ -50,6 +50,7 @@ class ListenTextMessageHandler(TextMessageHandler):
             if "text" in msg_json:
                 conn.last_activity_time = time.time() * 1000
                 original_text = msg_json["text"]  # 保留原始文本
+                interrupt = bool(msg_json.get("interrupt", False))
                 filtered_len, filtered_text = remove_punctuation_and_length(
                     original_text
                 )
@@ -58,6 +59,20 @@ class ListenTextMessageHandler(TextMessageHandler):
                 is_wakeup_words = filtered_text in conn.config.get("wakeup_words")
                 # 是否开启唤醒词回复
                 enable_greeting = conn.config.get("enable_greeting", True)
+
+                conn.logger.bind(tag=TAG).info(
+                    f"收到listen detect: text={original_text}, interrupt={interrupt}, speaking={conn.client_is_speaking}"
+                )
+
+                if is_wakeup_words and interrupt:
+                    conn.just_woken_up = True
+                    conn.logger.bind(tag=TAG).info(
+                        f"播放中唤醒词命中，执行打断: text={filtered_text}, speaking={conn.client_is_speaking}"
+                    )
+                    if conn.client_is_speaking:
+                        await send_tts_message(conn, "stop", None)
+                        conn.client_is_speaking = False
+                    return
 
                 if is_wakeup_words and not enable_greeting:
                     # 如果是唤醒词，且关闭了唤醒词回复，就不用回答

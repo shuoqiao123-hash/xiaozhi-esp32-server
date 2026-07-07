@@ -31,10 +31,7 @@ async def handleAudioMessage(conn: "ConnectionHandler", audio):
             conn.vad_resume_task = asyncio.create_task(resume_vad_detection(conn))
         return
 
-    # manual 模式下不打断正在播放的内容
-    if have_voice:
-        if  conn.client_is_speaking and conn.client_listen_mode != "manual":
-           await handleAbortMessage(conn)
+    
     
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)
