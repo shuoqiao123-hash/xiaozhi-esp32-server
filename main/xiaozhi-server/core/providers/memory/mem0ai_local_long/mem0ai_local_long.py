@@ -13,12 +13,12 @@ TAG = __name__
 
 
 class LocalBGEEmbedder:
-     """封装本地BGE嵌入模型，适配Mem0接口 / Wrapper for local BGE embedding model, adapts to Mem0 interface."""
-
+    """封装本地BGE嵌入模型，适配Mem0接口 / Wrapper for local BGE embedding model, adapts to Mem0 interface."""
+    
     def __init__(self, model_path: str, device: str = "cpu", embedding_dims: int = 1024):
         # 加载本地SentenceTransformer模型 / Load local SentenceTransformer model
         self.model = SentenceTransformer(model_path, device=device)
-         # 构建Mem0所需的Embedder配置 / Build embedder config for Mem0
+        # 构建Mem0所需的Embedder配置 / Build embedder config for Mem0
         self.config = BaseEmbedderConfig(
             model=model_path,
             embedding_dims=embedding_dims,
@@ -63,6 +63,7 @@ class MemoryProvider(MemoryProviderBase):
         self.embedding_device = config.get("embedding_device", "cpu")
         self.qdrant_path = config.get("qdrant_path", "/root/spanish/main/xiaozhi-server/data/qdrant_storage_m3")
         self.collection_prefix = config.get("collection_prefix", "memories_m3")
+        self.enable_debug_queries = bool(config.get("enable_debug_queries", False))
 
         # 构造LLM配置（用于Mem0） / Build LLM config for Mem0
         llm_provider = config.get("provider", "openai")
@@ -198,27 +199,30 @@ class MemoryProvider(MemoryProviderBase):
                 return None
 
             logger.bind(tag=TAG).info(
-                f"开始保存本地记忆: role_id={self.role_id}, client_kwargs={self._get_client_kwargs()}, count={len(messages)}, content={json.dumps(messages, ensure_ascii=False)}"
+                f"开始保存本地记忆: role_id={self.role_id}, count={len(messages)}"
             )
-            
+
             # 在线程中执行Mem0的add操作 / Execute Mem0 add in thread
             result = await asyncio.to_thread(
                 self.client.add,
                 messages,
                 **self._get_client_kwargs(),
             )
-            
-            # 调试：获取全部记忆 / Debug: get all memories
-            visible_memories = await asyncio.to_thread(
-                self.client.get_all,
-                limit=20,
-                **self._get_client_kwargs(),
-            )
+
+            if self.enable_debug_queries:
+                visible_memories = await asyncio.to_thread(
+                    self.client.get_all,
+                    limit=20,
+                    **self._get_client_kwargs(),
+                )
+                memory_count = len(visible_memories.get("results", [])) if isinstance(visible_memories, dict) else -1
+                logger.bind(tag=TAG).info(
+                    f"保存后本地记忆调试结果: role_id={self.role_id}, visible_count={memory_count}, all_memories={visible_memories}"
+                )
+
+            result_count = len(result.get("results", [])) if isinstance(result, dict) else -1
             logger.bind(tag=TAG).info(
-                f"保存后本地记忆全量调试结果: role_id={self.role_id}, all_memories={visible_memories}"
-            )
-            logger.bind(tag=TAG).info(
-                f"保存本地记忆成功: role_id={self.role_id}, result={result}"
+                f"保存本地记忆成功: role_id={self.role_id}, result_count={result_count}"
             )
             return result
         except Exception as e:
@@ -250,9 +254,9 @@ class MemoryProvider(MemoryProviderBase):
                 return ""
 
             logger.bind(tag=TAG).info(
-                f"开始查询本地记忆: role_id={self.role_id}, client_kwargs={self._get_client_kwargs()}, query={search_query}"
+                f"开始查询本地记忆: role_id={self.role_id}, query={search_query}"
             )
-            
+
             # 执行搜索 / Perform search
             results = await asyncio.to_thread(
                 self.client.search,
@@ -262,32 +266,33 @@ class MemoryProvider(MemoryProviderBase):
                 rerank=False,
                 **self._get_client_kwargs(),
             )
-            # 调试输出原始结果和全量记忆 / Debug raw results and all memories
-            logger.bind(tag=TAG).info(
-                f"本地记忆原始查询结果: role_id={self.role_id}, query={search_query}, raw_results={results}"
-            )
-            all_memories = await asyncio.to_thread(
-                self.client.get_all,
-                limit=20,
-                **self._get_client_kwargs(),
-            )
-            logger.bind(tag=TAG).info(
-                f"本地记忆全量调试结果: role_id={self.role_id}, all_memories={all_memories}"
-            )
-            # 额外底层向量查询用于调试 / Extra low-level vector query for debugging
-            direct_vector_results = await asyncio.to_thread(
-                self.client._search_vector_store,
-                search_query,
-                self._get_client_kwargs(),
-                10,
-                0.0,
-            )
-            logger.bind(tag=TAG).info(
-                f"本地记忆底层向量查询结果: role_id={self.role_id}, query={search_query}, vector_results={direct_vector_results}"
-            )
+
+            if self.enable_debug_queries:
+                logger.bind(tag=TAG).info(
+                    f"本地记忆原始查询结果: role_id={self.role_id}, query={search_query}, raw_results={results}"
+                )
+                all_memories = await asyncio.to_thread(
+                    self.client.get_all,
+                    limit=20,
+                    **self._get_client_kwargs(),
+                )
+                logger.bind(tag=TAG).info(
+                    f"本地记忆全量调试结果: role_id={self.role_id}, all_memories={all_memories}"
+                )
+                direct_vector_results = await asyncio.to_thread(
+                    self.client._search_vector_store,
+                    search_query,
+                    self._get_client_kwargs(),
+                    10,
+                    0.0,
+                )
+                logger.bind(tag=TAG).info(
+                    f"本地记忆底层向量查询结果: role_id={self.role_id}, query={search_query}, vector_results={direct_vector_results}"
+                )
+
             if not results or "results" not in results:
                 logger.bind(tag=TAG).info(
-                    f"查询本地记忆成功但无结果: role_id={self.role_id}, raw_results={results}"
+                    f"查询本地记忆成功但无结果: role_id={self.role_id}"
                 )
                 return ""
             
