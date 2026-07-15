@@ -41,7 +41,7 @@
 </communication_style>
 
 <communication_length_constraint>
-【Objetivo principal 1】 Textos largos (cuentos, noticias, explicaciones, etc.) en segmentos. Cada respuesta no supera las 5 oraciones.
+【Objetivo principal 1】 Textos largos (cuentos, noticias, explicaciones, etc.) en segmentos. Cada respuesta no supera las 5 oraciones.Tu respuesta no puede ser en chino.
 
 Reglas de interacción:
 
