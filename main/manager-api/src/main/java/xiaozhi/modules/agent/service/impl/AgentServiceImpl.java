@@ -36,6 +36,7 @@ import xiaozhi.modules.agent.dto.AgentCreateDTO;
 import xiaozhi.modules.agent.dto.AgentDTO;
 import xiaozhi.modules.agent.dto.AgentTagDTO;
 import xiaozhi.modules.agent.dto.AgentUpdateDTO;
+import xiaozhi.modules.agent.dto.ContextProviderDTO;
 import xiaozhi.modules.agent.entity.AgentContextProviderEntity;
 import xiaozhi.modules.agent.entity.AgentEntity;
 import xiaozhi.modules.agent.entity.AgentPluginMapping;
@@ -278,13 +279,67 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateAgentById(String agentId, AgentUpdateDTO dto) {
-        // 先查询现有实体
         AgentEntity existingEntity = this.getAgentById(agentId);
         if (existingEntity == null) {
             throw new RenException(ErrorCode.AGENT_NOT_FOUND);
         }
 
-        // 只更新提供的非空字段
+        UserDetail user = SecurityUser.getUser();
+        boolean isSuperAdmin = user != null && user.getSuperAdmin() == SuperAdminEnum.YES.value();
+
+        if (!isSuperAdmin) {
+            applyNormalUserUpdate(agentId, existingEntity, dto, user);
+            return;
+        }
+
+        applyFullUpdate(existingEntity, dto);
+        updateFunctions(agentId, dto.getFunctions());
+
+        existingEntity.setUpdater(user.getId());
+        existingEntity.setUpdatedAt(new Date());
+
+        reconcileMemoryStrategy(existingEntity);
+        updateContextProviders(agentId, dto.getContextProviders());
+
+        boolean b = validateLLMIntentParams(existingEntity.getLlmModelId(), existingEntity.getIntentModelId());
+        if (!b) {
+            throw new RenException(ErrorCode.LLM_INTENT_PARAMS_MISMATCH);
+        }
+        this.updateById(existingEntity);
+    }
+
+    private void applyNormalUserUpdate(String agentId, AgentEntity existingEntity, AgentUpdateDTO dto, UserDetail user) {
+        if (StringUtils.isNotBlank(dto.getTemplateId())) {
+            AgentTemplateEntity template = agentTemplateService.getById(dto.getTemplateId());
+            if (template == null) {
+                throw new RenException("模板不存在");
+            }
+            applyTemplateToAgent(existingEntity, template);
+        } else {
+            if (dto.getAgentName() != null) {
+                existingEntity.setAgentName(dto.getAgentName());
+            }
+            if (dto.getTtsVoiceId() != null) {
+                existingEntity.setTtsVoiceId(dto.getTtsVoiceId());
+            }
+            if (dto.getLangCode() != null) {
+                existingEntity.setLangCode(dto.getLangCode());
+            }
+            if (dto.getLanguage() != null) {
+                existingEntity.setLanguage(dto.getLanguage());
+            }
+            if (dto.getTtsLanguage() != null) {
+                existingEntity.setTtsLanguage(dto.getTtsLanguage());
+            }
+        }
+
+        existingEntity.setUpdater(user.getId());
+        existingEntity.setUpdatedAt(new Date());
+        reconcileMemoryStrategy(existingEntity);
+        this.updateById(existingEntity);
+    }
+
+    private void applyFullUpdate(AgentEntity existingEntity, AgentUpdateDTO dto) {
         if (dto.getAgentName() != null) {
             existingEntity.setAgentName(dto.getAgentName());
         }
@@ -345,89 +400,98 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         if (dto.getSort() != null) {
             existingEntity.setSort(dto.getSort());
         }
+    }
 
-        // 更新函数插件信息
-        List<AgentUpdateDTO.FunctionInfo> functions = dto.getFunctions();
-        if (functions != null) {
-            // 1. 收集本次提交的 pluginId
-            List<String> newPluginIds = functions.stream()
-                    .map(AgentUpdateDTO.FunctionInfo::getPluginId)
-                    .toList();
-
-            // 2. 查询当前agent现有的所有映射
-            List<AgentPluginMapping> existing = agentPluginMappingService.list(
-                    new QueryWrapper<AgentPluginMapping>()
-                            .eq("agent_id", agentId));
-            Map<String, AgentPluginMapping> existMap = existing.stream()
-                    .collect(Collectors.toMap(AgentPluginMapping::getPluginId, Function.identity()));
-
-            // 3. 构造所有要 保存或更新 的实体
-            List<AgentPluginMapping> allToPersist = functions.stream().map(info -> {
-                AgentPluginMapping m = new AgentPluginMapping();
-                m.setAgentId(agentId);
-                m.setPluginId(info.getPluginId());
-                m.setParamInfo(JsonUtils.toJsonString(info.getParamInfo()));
-                AgentPluginMapping old = existMap.get(info.getPluginId());
-                if (old != null) {
-                    // 已存在，设置id表示更新
-                    m.setId(old.getId());
-                }
-                return m;
-            }).toList();
-
-            // 4. 拆分：已有ID的走更新，无ID的走插入
-            List<AgentPluginMapping> toUpdate = allToPersist.stream()
-                    .filter(m -> m.getId() != null)
-                    .toList();
-            List<AgentPluginMapping> toInsert = allToPersist.stream()
-                    .filter(m -> m.getId() == null)
-                    .toList();
-
-            if (!toUpdate.isEmpty()) {
-                agentPluginMappingService.updateBatchById(toUpdate);
-            }
-            if (!toInsert.isEmpty()) {
-                agentPluginMappingService.saveBatch(toInsert);
-            }
-
-            // 5. 删除本次不在提交列表里的插件映射
-            List<Long> toDelete = existing.stream()
-                    .filter(old -> !newPluginIds.contains(old.getPluginId()))
-                    .map(AgentPluginMapping::getId)
-                    .toList();
-            if (!toDelete.isEmpty()) {
-                agentPluginMappingService.removeBatchByIds(toDelete);
-            }
+    private void updateFunctions(String agentId, List<AgentUpdateDTO.FunctionInfo> functions) {
+        if (functions == null) {
+            return;
         }
 
-        // 设置更新者信息
-        UserDetail user = SecurityUser.getUser();
-        existingEntity.setUpdater(user.getId());
-        existingEntity.setUpdatedAt(new Date());
+        List<String> newPluginIds = functions.stream()
+                .map(AgentUpdateDTO.FunctionInfo::getPluginId)
+                .toList();
 
-        // 更新记忆策略
+        List<AgentPluginMapping> existing = agentPluginMappingService.list(
+                new QueryWrapper<AgentPluginMapping>()
+                        .eq("agent_id", agentId));
+        Map<String, AgentPluginMapping> existMap = existing.stream()
+                .collect(Collectors.toMap(AgentPluginMapping::getPluginId, Function.identity()));
+
+        List<AgentPluginMapping> allToPersist = functions.stream().map(info -> {
+            AgentPluginMapping m = new AgentPluginMapping();
+            m.setAgentId(agentId);
+            m.setPluginId(info.getPluginId());
+            m.setParamInfo(JsonUtils.toJsonString(info.getParamInfo()));
+            AgentPluginMapping old = existMap.get(info.getPluginId());
+            if (old != null) {
+                m.setId(old.getId());
+            }
+            return m;
+        }).toList();
+
+        List<AgentPluginMapping> toUpdate = allToPersist.stream()
+                .filter(m -> m.getId() != null)
+                .toList();
+        List<AgentPluginMapping> toInsert = allToPersist.stream()
+                .filter(m -> m.getId() == null)
+                .toList();
+
+        if (!toUpdate.isEmpty()) {
+            agentPluginMappingService.updateBatchById(toUpdate);
+        }
+        if (!toInsert.isEmpty()) {
+            agentPluginMappingService.saveBatch(toInsert);
+        }
+
+        List<Long> toDelete = existing.stream()
+                .filter(old -> !newPluginIds.contains(old.getPluginId()))
+                .map(AgentPluginMapping::getId)
+                .toList();
+        if (!toDelete.isEmpty()) {
+            agentPluginMappingService.removeBatchByIds(toDelete);
+        }
+    }
+
+    private void updateContextProviders(String agentId, List<ContextProviderDTO> contextProviders) {
+        if (contextProviders == null) {
+            return;
+        }
+        AgentContextProviderEntity contextEntity = new AgentContextProviderEntity();
+        contextEntity.setAgentId(agentId);
+        contextEntity.setContextProviders(contextProviders);
+        agentContextProviderService.saveOrUpdateByAgentId(contextEntity);
+    }
+
+    private void reconcileMemoryStrategy(AgentEntity existingEntity) {
         if (existingEntity.getMemModelId() == null || existingEntity.getMemModelId().equals(Constant.MEMORY_NO_MEM)) {
-            // 删除所有记录
             agentChatHistoryService.deleteByAgentId(existingEntity.getId(), true, true);
             existingEntity.setSummaryMemory("");
         } else if (existingEntity.getChatHistoryConf() != null && existingEntity.getChatHistoryConf() == 1) {
-            // 删除音频数据
             agentChatHistoryService.deleteByAgentId(existingEntity.getId(), true, false);
         }
+    }
 
-        // 更新上下文源配置
-        if (dto.getContextProviders() != null) {
-            AgentContextProviderEntity contextEntity = new AgentContextProviderEntity();
-            contextEntity.setAgentId(agentId);
-            contextEntity.setContextProviders(dto.getContextProviders());
-            agentContextProviderService.saveOrUpdateByAgentId(contextEntity);
-        }
-
-        boolean b = validateLLMIntentParams(dto.getLlmModelId(), dto.getIntentModelId());
-        if (!b) {
-            throw new RenException(ErrorCode.LLM_INTENT_PARAMS_MISMATCH);
-        }
-        this.updateById(existingEntity);
+    private void applyTemplateToAgent(AgentEntity existingEntity, AgentTemplateEntity template) {
+        existingEntity.setAgentCode(template.getAgentCode());
+        existingEntity.setAgentName(template.getAgentName());
+        existingEntity.setAsrModelId(template.getAsrModelId());
+        existingEntity.setVadModelId(template.getVadModelId());
+        existingEntity.setLlmModelId(template.getLlmModelId());
+        existingEntity.setVllmModelId(template.getVllmModelId());
+        existingEntity.setTtsModelId(template.getTtsModelId());
+        existingEntity.setTtsVoiceId(template.getTtsVoiceId());
+        existingEntity.setTtsLanguage(template.getTtsLanguage());
+        existingEntity.setTtsVolume(template.getTtsVolume());
+        existingEntity.setTtsRate(template.getTtsRate());
+        existingEntity.setTtsPitch(template.getTtsPitch());
+        existingEntity.setMemModelId(template.getMemModelId());
+        existingEntity.setIntentModelId(template.getIntentModelId());
+        existingEntity.setChatHistoryConf(template.getChatHistoryConf());
+        existingEntity.setSystemPrompt(template.getSystemPrompt());
+        existingEntity.setSummaryMemory(template.getSummaryMemory());
+        existingEntity.setLangCode(template.getLangCode());
+        existingEntity.setLanguage(template.getLanguage());
+        existingEntity.setSort(template.getSort());
     }
 
     /**
@@ -454,8 +518,33 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String createAgent(AgentCreateDTO dto) {
-        // 转换为实体
-        AgentEntity entity = ConvertUtils.sourceToTarget(dto, AgentEntity.class);
+        UserDetail user = SecurityUser.getUser();
+        if (user == null || user.getId() == null) {
+            throw new RenException(ErrorCode.USER_NOT_LOGIN);
+        }
+
+        Long agentCount = baseDao.selectCount(new QueryWrapper<AgentEntity>().eq("user_id", user.getId()));
+        if (agentCount > 0) {
+            throw new RenException("每个用户仅允许拥有一个智能体");
+        }
+
+        return createAgentForUser(user.getId(), user.getId(), dto.getAgentName());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String createDefaultAgentForUser(Long userId, Long creatorId, String agentName) {
+        Long agentCount = baseDao.selectCount(new QueryWrapper<AgentEntity>().eq("user_id", userId));
+        if (agentCount > 0) {
+            throw new RenException("该用户已存在默认智能体");
+        }
+
+        return createAgentForUser(userId, creatorId, agentName);
+    }
+
+    private String createAgentForUser(Long userId, Long creatorId, String agentName) {
+        AgentEntity entity = new AgentEntity();
+        entity.setAgentName(agentName);
 
         // 获取默认模板
         AgentTemplateEntity template = agentTemplateService.getDefaultTemplate();
@@ -505,18 +594,13 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
             entity.setLanguage(template.getLanguage());
         }
 
-        // 设置用户ID和创建者信息
-        UserDetail user = SecurityUser.getUser();
-        entity.setUserId(user.getId());
-        entity.setCreator(user.getId());
+        entity.setUserId(userId);
+        entity.setCreator(creatorId);
         entity.setCreatedAt(new Date());
 
-        // 保存智能体
         insert(entity);
 
-        // 设置默认插件
         List<AgentPluginMapping> toInsert = new ArrayList<>();
-        // 播放音乐、查天气、查新闻
         String[] pluginIds = new String[] { "SYSTEM_PLUGIN_MUSIC", "SYSTEM_PLUGIN_WEATHER",
                 "SYSTEM_PLUGIN_NEWS_NEWSNOW" };
         for (String pluginId : pluginIds) {
@@ -538,7 +622,6 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
             mapping.setAgentId(entity.getId());
             toInsert.add(mapping);
         }
-        // 保存默认插件
         agentPluginMappingService.saveBatch(toInsert);
         return entity.getId();
     }

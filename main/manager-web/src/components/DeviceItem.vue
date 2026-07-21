@@ -7,19 +7,20 @@
       </div>
     </el-tooltip>
       <div>
-        <img src="@/assets/home/delete.png" alt="" style="width: 18px;height: 18px;margin-right: 10px;"
-          @click.stop="handleDelete" />
         <el-tooltip class="item" effect="light" :content="device.systemPrompt" placement="top"
           popper-class="custom-tooltip">
           <img src="@/assets/home/info.png" alt="" style="width: 18px;height: 18px;" />
         </el-tooltip>
       </div>
     </div>
+    <div v-if="device.userId !== undefined && device.userId !== null" class="device-name">
+      User ID：{{ device.userId }}
+    </div>
     <div class="device-name">
       {{ $t('home.languageModel') }}：{{ device.llmModelName }}
     </div>
     <div class="device-name">
-      {{ $t('home.voiceModel') }}：{{ device.ttsModelName }} ({{ device.ttsVoiceName }})
+      {{ $t('home.voiceModel') }}：{{ device.ttsModelName }}
     </div>
     <div style="display: flex;gap: 10px;align-items: center;">
       <div class="settings-btn" @click="handleConfigure">
@@ -95,9 +96,6 @@ export default {
     }
   },
   methods: {
-    handleDelete() {
-      this.$emit('delete', this.device.agentId)
-    },
     handleConfigure() {
       this.$router.push({ path: '/role-config', query: { agentId: this.device.agentId } });
     },

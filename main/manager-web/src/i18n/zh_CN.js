@@ -437,6 +437,7 @@ export default {
   'device.model': '设备型号',
   'device.macAddress': 'Mac地址',
   'device.firmwareVersion': '固件版本',
+  'device.batteryLevel': '电量',
   'device.bindTime': '绑定时间',
   'device.lastConversation': '最后对话',
   'device.remark': '备注',

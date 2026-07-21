@@ -48,7 +48,7 @@
                 <el-button type="primary" class="save-btn" @click="saveConfig">
                   {{ $t("roleConfig.saveConfig") }}
                 </el-button>
-                <el-button class="reset-btn" @click="resetConfig">{{
+                <el-button class="reset-btn" :disabled="isNormalUserReadonly" @click="resetConfig">{{
                   $t("roleConfig.reset")
                 }}</el-button>
                 <button class="custom-close-btn" @click="goToHome">×</button>
@@ -83,11 +83,12 @@
                     <el-form-item :label="$t('roleConfig.contextProvider') + '：'" class="context-provider-item">
                       <div style="display: flex; align-items: center; justify-content: space-between;">
                         <span style="color: #606266; font-size: 13px;">
-                          {{ $t('roleConfig.contextProviderSuccess', { count: currentContextProviders.length }) }}<a href="https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/context-provider-integration.md" target="_blank" class="doc-link">{{ $t('roleConfig.contextProviderDocLink') }}</a>
+                          {{ $t('roleConfig.contextProviderSuccess', { count: currentContextProviders.length }) }}<a v-if="!isNormalUserReadonly" href="https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/context-provider-integration.md" target="_blank" class="doc-link">{{ $t('roleConfig.contextProviderDocLink') }}</a><span v-else class="doc-link doc-link-disabled">{{ $t('roleConfig.contextProviderDocLink') }}</span>
                         </span>
                         <el-button
                           class="edit-function-btn"
                           size="small"
+                          :disabled="isNormalUserReadonly"
                           @click="openContextProviderDialog"
                         >
                           {{ $t('roleConfig.editContextProvider') }}
@@ -104,6 +105,7 @@
                         maxlength="2000"
                         show-word-limit
                         class="form-textarea"
+                        :readonly="isNormalUserReadonly"
                       />
                     </el-form-item>
 
@@ -116,7 +118,7 @@
                         maxlength="2000"
                         show-word-limit
                         class="form-textarea"
-                        :disabled="form.model.memModelId !== 'Memory_mem_local_short'"
+                        :disabled="isNormalUserReadonly || form.model.memModelId !== 'Memory_mem_local_short'"
                       />
                     </el-form-item>
                     <el-form-item
@@ -157,6 +159,7 @@
                             filterable
                             :placeholder="$t('roleConfig.pleaseSelect')"
                             class="form-select"
+                            :disabled="isNormalUserReadonly"
                             @change="handleModelChange('VAD', $event)"
                           >
                             <el-option
@@ -179,6 +182,7 @@
                             filterable
                             :placeholder="$t('roleConfig.pleaseSelect')"
                             class="form-select"
+                            :disabled="isNormalUserReadonly"
                             @change="handleModelChange('ASR', $event)"
                           >
                             <el-option
@@ -203,6 +207,7 @@
                           filterable
                           :placeholder="$t('roleConfig.pleaseSelect')"
                           class="form-select"
+                          :disabled="isNormalUserReadonly"
                           @change="handleModelChange(model.type, $event)"
                         >
                           <el-option
@@ -230,6 +235,7 @@
                           </el-tooltip>
                           <el-button
                             class="edit-function-btn"
+                            :disabled="isNormalUserReadonly"
                             @click="openFunctionDialog"
                             :class="{ 'active-btn': showFunctionDialog }"
                           >
@@ -245,6 +251,7 @@
                         >
                           <el-radio-group
                             v-model="form.chatHistoryConf"
+                            :disabled="isNormalUserReadonly"
                             @change="updateChatHistoryConf"
                           >
                             <el-radio-button :label="1">{{
@@ -322,6 +329,7 @@
                           <el-button
                             class="edit-function-btn"
                             style="margin-left: 10px;"
+                            :disabled="isNormalUserReadonly"
                             @click="openTtsAdvancedSettings"
                           >
                             {{ $t('roleConfig.advancedSettings') }}
@@ -438,8 +446,17 @@ export default {
       },
       dynamicTags: [],
       inputVisible: false,
-      inputValue: ''
+      inputValue: '',
+      selectedTemplateId: null
     };
+  },
+  computed: {
+    userInfo() {
+      return this.$store.state.userInfo || {};
+    },
+    isNormalUserReadonly() {
+      return this.userInfo.superAdmin !== 1;
+    },
   },
   methods: {
     goToHome() {
@@ -453,45 +470,57 @@ export default {
         return;
       }
 
-      const configData = {
-        agentCode: this.form.agentCode,
-        agentName: this.form.agentName,
-        asrModelId: this.form.model.asrModelId,
-        vadModelId: this.form.model.vadModelId,
-        llmModelId: this.form.model.llmModelId,
-        vllmModelId: this.form.model.vllmModelId,
-        ttsModelId: this.form.model.ttsModelId,
-        ttsVoiceId: this.form.ttsVoiceId,
-        ttsLanguage: this.selectedLanguage,
-        chatHistoryConf: this.form.chatHistoryConf,
-        memModelId: this.form.model.memModelId,
-        intentModelId: this.form.model.intentModelId,
-        systemPrompt: this.form.systemPrompt,
-        summaryMemory: this.form.summaryMemory,
-        langCode: this.form.langCode,
-        language: this.form.language,
-        sort: this.form.sort,
-        functions: this.currentFunctions.map((item) => {
-          return {
-            pluginId: item.id,
-            paramInfo: item.params,
-          };
-        }),
-        contextProviders: this.currentContextProviders,
-      };
+      let configData;
+      if (this.isNormalUserReadonly) {
+        configData = {
+          agentName: this.form.agentName,
+          ttsVoiceId: this.form.ttsVoiceId,
+          ttsLanguage: this.selectedLanguage,
+          langCode: this.form.langCode,
+          language: this.form.language,
+          templateId: this.selectedTemplateId,
+        };
+      } else {
+        configData = {
+          agentCode: this.form.agentCode,
+          agentName: this.form.agentName,
+          asrModelId: this.form.model.asrModelId,
+          vadModelId: this.form.model.vadModelId,
+          llmModelId: this.form.model.llmModelId,
+          vllmModelId: this.form.model.vllmModelId,
+          ttsModelId: this.form.model.ttsModelId,
+          ttsVoiceId: this.form.ttsVoiceId,
+          ttsLanguage: this.selectedLanguage,
+          chatHistoryConf: this.form.chatHistoryConf,
+          memModelId: this.form.model.memModelId,
+          intentModelId: this.form.model.intentModelId,
+          systemPrompt: this.form.systemPrompt,
+          summaryMemory: this.form.summaryMemory,
+          langCode: this.form.langCode,
+          language: this.form.language,
+          sort: this.form.sort,
+          functions: this.currentFunctions.map((item) => {
+            return {
+              pluginId: item.id,
+              paramInfo: item.params,
+            };
+          }),
+          contextProviders: this.currentContextProviders,
+        };
 
-      // 只在用户设置了TTS参数时才传递（不为null/undefined）
-      if (this.form.ttsVolume !== null && this.form.ttsVolume !== undefined) {
-        configData.ttsVolume = this.form.ttsVolume;
-      }
-      if (this.form.ttsRate !== null && this.form.ttsRate !== undefined) {
-        configData.ttsRate = this.form.ttsRate;
-      }
-      if (this.form.ttsPitch !== null && this.form.ttsPitch !== undefined) {
-        configData.ttsPitch = this.form.ttsPitch;
+        if (this.form.ttsVolume !== null && this.form.ttsVolume !== undefined) {
+          configData.ttsVolume = this.form.ttsVolume;
+        }
+        if (this.form.ttsRate !== null && this.form.ttsRate !== undefined) {
+          configData.ttsRate = this.form.ttsRate;
+        }
+        if (this.form.ttsPitch !== null && this.form.ttsPitch !== undefined) {
+          configData.ttsPitch = this.form.ttsPitch;
+        }
       }
       Api.agent.updateAgentConfig(this.$route.query.agentId, configData, ({ data }) => {
         if (data.code === 0) {
+          this.selectedTemplateId = null;
           this.$message.success({
             message: i18n.t("roleConfig.saveSuccess"),
             showClose: true,
@@ -554,6 +583,7 @@ export default {
       if (this.loadingTemplate) return;
       this.loadingTemplate = true;
       try {
+        this.selectedTemplateId = template.id;
         this.applyTemplateData(template);
         this.$message.success({
           message: `${template.agentName}${i18n.t("roleConfig.templateApplied")}`,
@@ -803,6 +833,9 @@ export default {
       return type === "Intent" && this.form.model.intentModelId !== "Intent_nointent";
     },
     handleModelChange(type, value) {
+      if (this.isNormalUserReadonly) {
+        return;
+      }
       if (type === "Intent" && value !== "Intent_nointent") {
         this.fetchAllFunctions();
       }
@@ -841,7 +874,9 @@ export default {
       });
     },
     openFunctionDialog() {
-      // 显示编辑对话框时，确保 allFunctions 已经加载
+      if (this.isNormalUserReadonly) {
+        return;
+      }
       if (this.allFunctions.length === 0) {
         this.fetchAllFunctions().then(() => (this.showFunctionDialog = true));
       } else {
@@ -849,13 +884,21 @@ export default {
       }
     },
     openContextProviderDialog() {
+      if (this.isNormalUserReadonly) {
+        return;
+      }
       this.showContextProviderDialog = true;
     },
     openTtsAdvancedSettings() {
+      if (this.isNormalUserReadonly) {
+        return;
+      }
       this.showTtsAdvancedDialog = true;
     },
     handleTtsSettingsSave(settings) {
-      // 保存TTS设置
+      if (this.isNormalUserReadonly) {
+        return;
+      }
       this.ttsSettings = { ...settings };
       this.form.ttsVolume = settings.volume;
       this.form.ttsRate = settings.speed;
@@ -1250,6 +1293,17 @@ export default {
     },
   },
   async mounted() {
+    if (!this.$store.state.userInfo || this.$store.state.userInfo.superAdmin === undefined) {
+      const cachedUserInfo = localStorage.getItem('userInfo');
+      if (cachedUserInfo) {
+        try {
+          this.$store.commit('setUserInfo', JSON.parse(cachedUserInfo));
+        } catch (error) {
+          console.error('解析用户信息失败:', error);
+        }
+      }
+    }
+
     const agentId = this.$route.query.agentId;
     if (agentId) {
       this.fetchAgentConfig(agentId);
@@ -1679,6 +1733,13 @@ export default {
 
 .context-provider-item ::v-deep .el-form-item__label {
   line-height: 42px !important;
+}
+
+.doc-link-disabled {
+  color: #c0c4cc;
+  cursor: not-allowed;
+  text-decoration: none;
+  pointer-events: none;
 }
 
 .doc-link {

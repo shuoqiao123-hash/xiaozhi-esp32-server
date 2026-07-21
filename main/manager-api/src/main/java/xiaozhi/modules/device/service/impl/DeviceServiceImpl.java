@@ -61,12 +61,18 @@ import xiaozhi.modules.device.dto.DeviceManualAddDTO;
 import xiaozhi.modules.device.dto.DevicePageUserDTO;
 import xiaozhi.modules.device.dto.DeviceReportReqDTO;
 import xiaozhi.modules.device.dto.DeviceReportRespDTO;
+import xiaozhi.modules.agent.dao.AgentDao;
+import xiaozhi.modules.agent.entity.AgentEntity;
 import xiaozhi.modules.device.entity.DeviceEntity;
 import xiaozhi.modules.device.entity.OtaEntity;
 import xiaozhi.modules.device.service.DeviceService;
 import xiaozhi.modules.device.service.OtaService;
 import xiaozhi.modules.device.vo.UserShowDeviceListVO;
+import xiaozhi.modules.security.dao.SysUserTokenDao;
+import xiaozhi.modules.security.entity.SysUserTokenEntity;
 import xiaozhi.modules.security.user.SecurityUser;
+import xiaozhi.modules.sys.dao.SysUserDao;
+import xiaozhi.modules.sys.entity.SysUserEntity;
 import xiaozhi.modules.sys.service.SysParamsService;
 import xiaozhi.modules.sys.service.SysUserUtilService;
 
@@ -80,6 +86,9 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
     private final SysParamsService sysParamsService;
     private final RedisUtils redisUtils;
     private final OtaService otaService;
+    private final SysUserTokenDao sysUserTokenDao;
+    private final SysUserDao sysUserDao;
+    private final AgentDao agentDao;
 
     @Async
     public void updateDeviceConnectionInfo(String agentId, String deviceId, String appVersion) {
@@ -203,6 +212,9 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
         response.setServer_time(buildServerTime());
 
         DeviceEntity deviceById = getDeviceByMacAddress(macAddress);
+        if (deviceById == null) {
+            deviceById = autoBindDeviceIfPossible(macAddress, deviceReport);
+        }
 
         // 设备未绑定，则返回当前上传的固件信息（不更新）以此兼容旧固件版本
         if (deviceById == null) {
@@ -370,6 +382,92 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
         QueryWrapper<DeviceEntity> wrapper = new QueryWrapper<>();
         wrapper.eq("mac_address", macAddress);
         return baseDao.selectOne(wrapper);
+    }
+
+    private DeviceEntity autoBindDeviceIfPossible(String macAddress, DeviceReportReqDTO deviceReport) {
+        String token = extractAuthorizationToken();
+        if (StringUtils.isBlank(token)) {
+            return null;
+        }
+
+        try {
+            SysUserTokenEntity userToken = sysUserTokenDao.getByToken(token);
+            if (userToken == null || userToken.getExpireDate() == null || userToken.getExpireDate().before(new Date())) {
+                return null;
+            }
+
+            SysUserEntity user = sysUserDao.selectById(userToken.getUserId());
+            if (user == null || user.getId() == null) {
+                return null;
+            }
+
+            QueryWrapper<AgentEntity> wrapper = new QueryWrapper<>();
+            wrapper.eq("user_id", user.getId());
+            List<AgentEntity> agents = agentDao.selectList(wrapper);
+            if (agents == null || agents.size() != 1) {
+                log.info("skip auto bind for macAddress={}, reason=agent_count_not_one, userId={}, agentCount={}",
+                        macAddress, user.getId(), agents == null ? 0 : agents.size());
+                return null;
+            }
+
+            AgentEntity agent = agents.get(0);
+            Date now = new Date();
+            DeviceEntity entity = new DeviceEntity();
+            entity.setId(macAddress);
+            entity.setUserId(user.getId());
+            entity.setAgentId(agent.getId());
+            entity.setBoard(deviceReport.getBoard() != null && deviceReport.getBoard().getType() != null
+                    ? deviceReport.getBoard().getType()
+                    : (deviceReport.getChipModelName() != null ? deviceReport.getChipModelName() : "unknown"));
+            entity.setAppVersion(deviceReport.getApplication() != null ? deviceReport.getApplication().getVersion() : null);
+            entity.setMacAddress(macAddress);
+            entity.setCreateDate(now);
+            entity.setUpdateDate(now);
+            entity.setLastConnectedAt(now);
+            entity.setCreator(user.getId());
+            entity.setUpdater(user.getId());
+            entity.setAutoUpdate(1);
+            deviceDao.insert(entity);
+            redisUtils.delete(RedisKeys.getAgentDeviceCountById(agent.getId()));
+            log.info("auto bound device macAddress={} to userId={} agentId={}", macAddress, user.getId(), agent.getId());
+            return entity;
+        } catch (Exception e) {
+            log.warn("auto bind skipped for macAddress={}, reason={}", macAddress, e.getMessage());
+            return null;
+        }
+    }
+
+    private String extractAuthorizationToken() {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes == null) {
+            return null;
+        }
+        HttpServletRequest request = attributes.getRequest();
+        if (request == null) {
+            return null;
+        }
+
+        String authorization = request.getHeader(Header.AUTHORIZATION.getValue());
+        if (StringUtils.isBlank(authorization) || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+
+        String rawToken = authorization.substring(7).trim();
+        if (StringUtils.isBlank(rawToken)) {
+            return null;
+        }
+
+        if (rawToken.startsWith("{")) {
+            try {
+                JSONObject tokenJson = JSONUtil.parseObj(rawToken);
+                return tokenJson.getStr("token");
+            } catch (Exception e) {
+                log.warn("failed to parse bearer json token: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        return rawToken;
     }
 
     private DeviceReportRespDTO.ServerTime buildServerTime() {
@@ -554,6 +652,24 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
         wrapper.like("mac_address", macAddress);
         wrapper.eq("user_id", userId);
         return deviceDao.selectList(wrapper);
+    }
+
+    @Override
+    public void updateBatteryLevelByMacAddress(String macAddress, Integer batteryLevel) {
+        if (StringUtils.isBlank(macAddress) || batteryLevel == null) {
+            log.warn("更新设备电量跳过，参数无效 macAddress={}, batteryLevel={}", macAddress, batteryLevel);
+            return;
+        }
+
+        String normalizedMacAddress = macAddress.toLowerCase();
+        log.info("开始更新设备电量 macAddress={}, batteryLevel={}", normalizedMacAddress, batteryLevel);
+
+        DeviceEntity device = new DeviceEntity();
+        device.setBatteryLevel(batteryLevel);
+        int updatedRows = deviceDao.update(device,
+                new UpdateWrapper<DeviceEntity>().eq("mac_address", normalizedMacAddress));
+        log.info("设备电量更新结果 macAddress={}, batteryLevel={}, updatedRows={}", normalizedMacAddress, batteryLevel,
+                updatedRows);
     }
 
     /**

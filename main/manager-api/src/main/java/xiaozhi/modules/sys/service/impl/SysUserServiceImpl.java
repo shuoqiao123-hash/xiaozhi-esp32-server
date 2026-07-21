@@ -69,7 +69,7 @@ public class SysUserServiceImpl extends BaseServiceImpl<SysUserDao, SysUserEntit
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void save(SysUserDTO dto) {
+    public Long save(SysUserDTO dto) {
         SysUserEntity entity = ConvertUtils.sourceToTarget(dto, SysUserEntity.class);
 
         // 密码强度
@@ -91,6 +91,7 @@ public class SysUserServiceImpl extends BaseServiceImpl<SysUserDao, SysUserEntit
         entity.setStatus(1);
 
         insert(entity);
+        return entity.getId();
     }
 
     @Override

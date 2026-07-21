@@ -18,6 +18,22 @@ export default {
                 });
             }).send();
     },
+    // 获取全部智能体列表（管理员）
+    getAllAgentList(params, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/all`)
+            .method('GET')
+            .data(params)
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.getAllAgentList(params, callback);
+                });
+            }).send();
+    },
     // 添加智能体
     addAgent(agentName, callback) {
         RequestService.sendRequest()

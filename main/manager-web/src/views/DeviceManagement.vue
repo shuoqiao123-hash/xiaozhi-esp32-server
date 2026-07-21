@@ -35,10 +35,15 @@
               <el-table-column :label="$t('device.bindTime')" prop="bindTime" align="center"></el-table-column>
               <el-table-column :label="$t('device.lastConversation')" prop="lastConversation"
                 align="center"></el-table-column>
-              <el-table-column v-if="mqttServiceAvailable" :label="$t('device.deviceStatus')" prop="deviceStatus" align="center">
+              <el-table-column :label="$t('device.deviceStatus')" prop="deviceStatus" align="center">
                 <template slot-scope="scope">
                   <el-tag v-if="scope.row.deviceStatus === 'online'" type="success">{{ $t('device.online') }}</el-tag>
                   <el-tag v-else type="danger">{{ $t('device.offline') }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="$t('device.batteryLevel')" prop="batteryLevel" align="center">
+                <template slot-scope="scope">
+                  {{ Number.isInteger(scope.row.batteryLevel) ? `${scope.row.batteryLevel}%` : '-' }}
                 </template>
               </el-table-column>
               <el-table-column :label="$t('device.remark')" align="center">
@@ -150,7 +155,6 @@ export default {
       loading: false,
       userApi: null,
       firmwareTypes: [],
-      mqttServiceAvailable: false, // MQTT服务是否可用
     };
   },
   computed: {
@@ -367,6 +371,7 @@ export default {
               device_id: device.id,
               model: device.board,
               firmwareVersion: device.appVersion,
+              batteryLevel: device.batteryLevel,
               macAddress: device.macAddress,
               bindTime: device.createDate,
               lastConversation: device.lastConnectedAt,
@@ -406,21 +411,11 @@ export default {
 
             // 直接使用解析后的数据作为设备状态映射（不需要devices字段包装）
             if (statusData && typeof statusData === 'object') {
-              // 成功获取到设备状态
-              this.mqttServiceAvailable = true;
-              // 更新设备状态
               this.updateDeviceStatusFromResponse(statusData);
-            } else {
-              // 数据格式不正确，MQTT服务不可用
-              this.mqttServiceAvailable = false;
             }
           } catch (error) {
-            // JSON解析失败，MQTT服务不可用
-            this.mqttServiceAvailable = false;
+            // 保持默认离线状态
           }
-        } else {
-          // 接口调用失败，MQTT服务不可用
-          this.mqttServiceAvailable = false;
         }
       });
     },

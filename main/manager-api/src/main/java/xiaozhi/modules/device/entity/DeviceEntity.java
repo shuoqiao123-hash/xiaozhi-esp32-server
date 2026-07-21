@@ -46,6 +46,9 @@ public class DeviceEntity {
     @Schema(description = "固件版本号")
     private String appVersion;
 
+    @Schema(description = "设备电量")
+    private Integer batteryLevel;
+
     @Schema(description = "排序")
     private Integer sort;
 

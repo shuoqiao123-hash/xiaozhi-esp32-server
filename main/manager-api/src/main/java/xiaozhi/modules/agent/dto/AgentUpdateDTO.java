@@ -85,6 +85,9 @@ public class AgentUpdateDTO implements Serializable {
     @Schema(description = "上下文源配置", nullable = true)
     private List<ContextProviderDTO> contextProviders;
 
+    @Schema(description = "本次应用的模板ID", example = "9406648b5cc5fde1b8aa335b6f8b4f76", nullable = true)
+    private String templateId;
+
     @Data
     @Schema(description = "插件函数信息")
     public static class FunctionInfo implements Serializable {

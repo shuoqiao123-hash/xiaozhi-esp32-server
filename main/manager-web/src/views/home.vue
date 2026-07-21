@@ -16,15 +16,6 @@
             <div class="hi-hint">
               let's have a wonderful day!
             </div>
-            <div class="add-device-btn">
-              <div class="left-add" @click="showAddDialog">
-                {{ $t('home.addAgent') }}
-              </div>
-              <div style="width: 23px;height: 13px;background: #5778ff;margin-left: -10px;" />
-              <div class="right-add">
-                <i class="el-icon-right" @click="showAddDialog" style="font-size: 20px;color: #fff;" />
-              </div>
-            </div>
           </div>
         </div>
         <div class="device-list-container">
@@ -45,7 +36,6 @@
           </template>
         </div>
       </div>
-      <AddWisdomBodyDialog :visible.sync="addDeviceDialogVisible" @confirm="handleWisdomBodyAdded" />
     </el-main>
     <el-footer>
       <version-footer />
@@ -57,7 +47,6 @@
 
 <script>
 import Api from '@/apis/api';
-import AddWisdomBodyDialog from '@/components/AddWisdomBodyDialog.vue';
 import ChatHistoryDialog from '@/components/ChatHistoryDialog.vue';
 import DeviceItem from '@/components/DeviceItem.vue';
 import HeaderBar from '@/components/HeaderBar.vue';
@@ -66,10 +55,9 @@ import featureManager from '@/utils/featureManager';
 
 export default {
   name: 'HomePage',
-  components: { DeviceItem, AddWisdomBodyDialog, HeaderBar, VersionFooter, ChatHistoryDialog },
+  components: { DeviceItem, HeaderBar, VersionFooter, ChatHistoryDialog },
   data() {
     return {
-      addDeviceDialogVisible: false,
       devices: [],
       originalDevices: [],
       isSearching: false,
@@ -86,6 +74,11 @@ export default {
         knowledgeBase: false
       }
     }
+  },
+  computed: {
+    isSuperAdmin() {
+      return this.$store.state.userInfo?.superAdmin === 1;
+    },
   },
 
   async mounted() {
@@ -104,17 +97,9 @@ export default {
         knowledgeBase: config.knowledgeBase
       };
     },
-    
-    showAddDialog() {
-      this.addDeviceDialogVisible = true
-    },
     goToRoleConfig() {
       // 点击配置角色后跳转到角色配置页
       this.$router.push('/role-config')
-    },
-    handleWisdomBodyAdded(res) {
-      this.fetchAgentList();
-      this.addDeviceDialogVisible = false;
     },
     handleDeviceManage() {
       this.$router.push('/device-management');
@@ -122,7 +107,16 @@ export default {
     handleSearch(keyword) {
       this.isSearching = true;
       this.isLoading = true;
-      // 检测MAC地址格式：包含4个冒号
+      if (this.isSuperAdmin) {
+        const normalizedKeyword = (keyword || '').toLowerCase();
+        this.devices = this.originalDevices.filter(item => {
+          const agentName = (item.agentName || '').toLowerCase();
+          const userId = String(item.userId || '');
+          return agentName.includes(normalizedKeyword) || userId.includes(normalizedKeyword);
+        });
+        this.isLoading = false;
+        return;
+      }
       const isMac = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(keyword)
       const searchType = isMac ? 'mac' : 'name';
       Api.agent.searchAgent(keyword, searchType, ({ data }) => {
@@ -152,6 +146,33 @@ export default {
     // 获取智能体列表
     fetchAgentList() {
       this.isLoading = true;
+      if (this.isSuperAdmin) {
+        Api.agent.getAllAgentList({ page: 1, limit: 1000 }, ({ data }) => {
+          const records = data?.data?.list || data?.data?.records || [];
+          this.originalDevices = records.map(item => ({
+            ...item,
+            agentId: item.id,
+            llmModelName: item.llmModelId || '-',
+            ttsModelName: item.ttsModelId || '-',
+            ttsVoiceName: item.ttsVoiceId || '-',
+            deviceCount: item.deviceCount ?? 0,
+            tags: item.tags || []
+          }));
+
+          this.skeletonCount = Math.min(
+            Math.max(this.originalDevices.length, 3),
+            10
+          );
+
+          this.handleSearchReset();
+          this.isLoading = false;
+        }, (error) => {
+          console.error('Failed to fetch admin agent list:', error);
+          this.isLoading = false;
+        });
+        return;
+      }
+
       Api.agent.getAgentList(({ data }) => {
         if (data?.data) {
           this.originalDevices = data.data.map(item => ({
@@ -159,10 +180,9 @@ export default {
             agentId: item.id
           }));
 
-          // 动态设置骨架屏数量（可选）
           this.skeletonCount = Math.min(
-            Math.max(this.originalDevices.length, 3), // 最少3个
-            10 // 最多10个
+            Math.max(this.originalDevices.length, 3),
+            10
           );
 
           this.handleSearchReset();

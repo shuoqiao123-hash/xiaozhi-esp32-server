@@ -133,4 +133,9 @@ public interface DeviceService extends BaseService<DeviceEntity> {
      */
     Object callDeviceTool(String deviceId, String toolName, Map<String, Object> arguments);
 
+    /**
+     * 按MAC地址更新设备电量
+     */
+    void updateBatteryLevelByMacAddress(String macAddress, Integer batteryLevel);
+
 }

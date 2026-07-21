@@ -29,6 +29,7 @@ import xiaozhi.common.utils.Result;
 import xiaozhi.common.utils.Sm2DecryptUtil;
 import xiaozhi.common.validator.AssertUtils;
 import xiaozhi.common.validator.ValidatorUtils;
+import xiaozhi.modules.agent.service.AgentService;
 import xiaozhi.modules.security.dto.LoginDTO;
 import xiaozhi.modules.security.dto.SmsVerificationDTO;
 import xiaozhi.modules.security.password.PasswordUtils;
@@ -57,6 +58,7 @@ public class LoginController {
     private final CaptchaService captchaService;
     private final SysParamsService sysParamsService;
     private final SysDictDataService sysDictDataService;
+    private final AgentService agentService;
 
     @GetMapping("/captcha")
     @Operation(summary = "验证码")
@@ -150,7 +152,8 @@ public class LoginController {
         userDTO = new SysUserDTO();
         userDTO.setUsername(login.getUsername());
         userDTO.setPassword(login.getPassword());
-        sysUserService.save(userDTO);
+        Long userId = sysUserService.save(userDTO);
+        agentService.createDefaultAgentForUser(userId, userId, "智能体");
         return new Result<>();
     }
 

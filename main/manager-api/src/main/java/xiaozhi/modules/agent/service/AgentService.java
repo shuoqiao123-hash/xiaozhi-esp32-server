@@ -101,5 +101,14 @@ public interface AgentService extends BaseService<AgentEntity> {
      */
     String createAgent(AgentCreateDTO dto);
 
+    /**
+     * 为指定用户创建默认智能体
+     *
+     * @param userId    用户ID
+     * @param creatorId 创建者ID
+     * @param agentName 智能体名称
+     * @return 创建的智能体ID
+     */
+    String createDefaultAgentForUser(Long userId, Long creatorId, String agentName);
 
 }

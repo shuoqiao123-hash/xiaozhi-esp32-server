@@ -22,6 +22,7 @@ import xiaozhi.common.redis.RedisKeys;
 import xiaozhi.common.redis.RedisUtils;
 import xiaozhi.common.user.UserDetail;
 import xiaozhi.common.utils.Result;
+import xiaozhi.modules.device.dto.DeviceBatteryLevelUpdateDTO;
 import xiaozhi.modules.device.dto.DeviceManualAddDTO;
 import xiaozhi.modules.device.dto.DeviceRegisterDTO;
 import xiaozhi.modules.device.dto.DeviceToolsCallReqDTO;
@@ -119,6 +120,13 @@ public class DeviceController {
         BeanUtils.copyProperties(deviceUpdateDTO, entity);
         deviceService.updateById(entity);
         return new Result<Void>();
+    }
+
+    @PutMapping("/battery-level")
+    @Operation(summary = "按MAC地址更新设备电量")
+    public Result<Void> updateBatteryLevel(@Valid @RequestBody DeviceBatteryLevelUpdateDTO dto) {
+        deviceService.updateBatteryLevelByMacAddress(dto.getMacAddress(), dto.getBatteryLevel());
+        return new Result<>();
     }
 
     @PostMapping("/manual-add")

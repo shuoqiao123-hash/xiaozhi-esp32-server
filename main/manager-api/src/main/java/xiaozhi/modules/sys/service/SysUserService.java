@@ -17,7 +17,7 @@ public interface SysUserService extends BaseService<SysUserEntity> {
 
     SysUserDTO getByUserId(Long userId);
 
-    void save(SysUserDTO dto);
+    Long save(SysUserDTO dto);
 
     /**
      * 删除指定用户，且有关联的数据设备和智能体
