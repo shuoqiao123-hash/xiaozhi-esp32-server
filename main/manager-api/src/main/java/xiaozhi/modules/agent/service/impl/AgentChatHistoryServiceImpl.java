@@ -178,4 +178,14 @@ public class AgentChatHistoryServiceImpl extends ServiceImpl<AiAgentChatHistoryD
                 .eq(AgentChatHistoryEntity::getAgentId, agentId));
         return row == 1;
     }
+
+    @Override
+    public java.util.Date getLatestChatTimeByAgentId(String agentId) {
+        AgentChatHistoryEntity latest = baseMapper.selectOne(new LambdaQueryWrapper<AgentChatHistoryEntity>()
+                .select(AgentChatHistoryEntity::getCreatedAt)
+                .eq(AgentChatHistoryEntity::getAgentId, agentId)
+                .orderByDesc(AgentChatHistoryEntity::getCreatedAt)
+                .last("limit 1"));
+        return latest == null ? null : latest.getCreatedAt();
+    }
 }

@@ -181,7 +181,8 @@ public class ConfigServiceImpl implements ConfigService {
             agent.setVadModelId(null);
         }
         String alreadySelectedAsrModelId = selectedModule.get("ASR");
-        if (alreadySelectedAsrModelId != null && alreadySelectedAsrModelId.equals(agent.getAsrModelId())) {
+        if (alreadySelectedAsrModelId != null && alreadySelectedAsrModelId.equals(agent.getAsrModelId())
+                && StringUtils.isBlank(agent.getTtsLanguage())) {
             agent.setAsrModelId(null);
         }
 
@@ -235,8 +236,37 @@ public class ConfigServiceImpl implements ConfigService {
                 null,
                 result,
                 true);
+        applyAzureAsrLanguageOverride(result, agent.getTtsLanguage());
 
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyAzureAsrLanguageOverride(Map<String, Object> result, String language) {
+        if (StringUtils.isBlank(language)) {
+            return;
+        }
+        Object selectedModuleObj = result.get("selected_module");
+        if (!(selectedModuleObj instanceof Map)) {
+            return;
+        }
+        String asrModelId = (String) ((Map<String, Object>) selectedModuleObj).get("ASR");
+        if (StringUtils.isBlank(asrModelId)) {
+            return;
+        }
+        Object asrObj = result.get("ASR");
+        if (!(asrObj instanceof Map)) {
+            return;
+        }
+        Object asrConfigObj = ((Map<String, Object>) asrObj).get(asrModelId);
+        if (!(asrConfigObj instanceof Map)) {
+            return;
+        }
+        Map<String, Object> asrConfig = (Map<String, Object>) asrConfigObj;
+        if (!"azure_stream_new".equals(asrConfig.get("type"))) {
+            return;
+        }
+        asrConfig.put("language", language);
     }
 
     /**

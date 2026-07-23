@@ -158,6 +158,9 @@ export default {
     };
   },
   computed: {
+    isSuperAdmin() {
+      return this.$store.state.userInfo?.superAdmin === 1;
+    },
     filteredDeviceList() {
       const keyword = this.activeSearchKeyword.toLowerCase();
       if (!keyword) return this.deviceList;

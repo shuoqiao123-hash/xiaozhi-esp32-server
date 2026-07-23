@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.Date;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -94,4 +95,12 @@ public class AgentEntity {
 
     @Schema(description = "更新时间")
     private Date updatedAt;
+
+    @TableField(exist = false)
+    @Schema(description = "最近连接时间")
+    private Date lastConnectedAt;
+
+    @TableField(exist = false)
+    @Schema(description = "已绑定设备数量")
+    private Integer deviceCount;
 }

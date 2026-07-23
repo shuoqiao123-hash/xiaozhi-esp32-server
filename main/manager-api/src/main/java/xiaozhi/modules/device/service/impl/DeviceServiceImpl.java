@@ -67,6 +67,7 @@ import xiaozhi.modules.device.entity.DeviceEntity;
 import xiaozhi.modules.device.entity.OtaEntity;
 import xiaozhi.modules.device.service.DeviceService;
 import xiaozhi.modules.device.service.OtaService;
+import xiaozhi.modules.device.vo.DeviceStatusVO;
 import xiaozhi.modules.device.vo.UserShowDeviceListVO;
 import xiaozhi.modules.security.dao.SysUserTokenDao;
 import xiaozhi.modules.security.entity.SysUserTokenEntity;
@@ -176,9 +177,11 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
         // 构建完整的URL
         String url = StrUtil.format("http://{}/api/devices/status", mqttGatewayUrl);
 
-        // 获取当前用户的设备列表
+        // 获取当前用户或管理员可见的设备列表
         UserDetail user = SecurityUser.getUser();
-        List<DeviceEntity> devices = getUserDevices(user.getId(), agentId);
+        List<DeviceEntity> devices = user.getSuperAdmin() != null && user.getSuperAdmin() == 1
+                ? getDevicesByAgentId(agentId)
+                : getUserDevices(user.getId(), agentId);
 
         // 构建deviceIds数组
         Set<String> deviceIds = devices.stream().map(o -> {
@@ -311,6 +314,13 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
     }
 
     @Override
+    public List<DeviceEntity> getDevicesByAgentId(String agentId) {
+        QueryWrapper<DeviceEntity> wrapper = new QueryWrapper<>();
+        wrapper.eq("agent_id", agentId);
+        return baseDao.selectList(wrapper);
+    }
+
+    @Override
     public void unbindDevice(Long userId, String deviceId) {
         // 先查询设备信息，获取agentId
         DeviceEntity device = baseDao.selectById(deviceId);
@@ -380,8 +390,70 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
             return null;
         }
         QueryWrapper<DeviceEntity> wrapper = new QueryWrapper<>();
-        wrapper.eq("mac_address", macAddress);
+        wrapper.eq("mac_address", normalizeMacAddress(macAddress));
         return baseDao.selectOne(wrapper);
+    }
+
+    @Override
+    public DeviceStatusVO getDeviceStatusByMacAddress(String macAddress, Long currentUserId, boolean superAdmin) {
+        DeviceEntity device = getDeviceByMacAddress(macAddress);
+        if (device == null) {
+            throw new RenException("设备不存在");
+        }
+        if (!superAdmin && !device.getUserId().equals(currentUserId)) {
+            throw new RenException("无权限访问该设备");
+        }
+
+        DeviceStatusVO status = new DeviceStatusVO();
+        status.setMacAddress(device.getMacAddress());
+        status.setBatteryLevel(device.getBatteryLevel());
+        status.setLastConnectedAt(device.getLastConnectedAt());
+        status.setOnline(queryMqttOnlineStatus(device));
+        return status;
+    }
+
+    private boolean queryMqttOnlineStatus(DeviceEntity device) {
+        String mqttGatewayUrl = sysParamsService.getValue("server.mqtt_manager_api", true);
+        if (StringUtils.isBlank(mqttGatewayUrl) || "null".equals(mqttGatewayUrl)) {
+            return false;
+        }
+
+        String macAddress = Optional.ofNullable(device.getMacAddress()).orElse("unknown").replace(":", "_");
+        String groupId = Optional.ofNullable(device.getBoard()).orElse("GID_default").replace(":", "_");
+        String clientId = StrUtil.format("{}@@@{}@@@{}", groupId, macAddress, macAddress);
+
+        Map<String, Set<String>> params = MapUtil
+                .builder(new HashMap<String, Set<String>>())
+                .put("clientIds", Set.of(clientId)).build();
+
+        try {
+            String resultMessage = HttpRequest.post(StrUtil.format("http://{}/api/devices/status", mqttGatewayUrl))
+                    .header(Header.CONTENT_TYPE, ContentType.JSON.getValue())
+                    .header(Header.AUTHORIZATION, "Bearer " + generateBearerToken())
+                    .body(JSONUtil.toJsonStr(params))
+                    .timeout(3000)
+                    .execute().body();
+            if (StringUtils.isBlank(resultMessage)) {
+                return false;
+            }
+            JSONObject result = JSONUtil.parseObj(resultMessage);
+            JSONObject deviceStatus = result.getJSONObject(clientId);
+            return deviceStatus != null && Boolean.TRUE.equals(deviceStatus.getBool("isAlive"));
+        } catch (Exception e) {
+            log.warn("查询设备MQTT在线状态失败 macAddress={}: {}", device.getMacAddress(), e.getMessage());
+            return false;
+        }
+    }
+
+    private String normalizeMacAddress(String macAddress) {
+        if (StringUtils.isBlank(macAddress)) {
+            return macAddress;
+        }
+        String normalized = macAddress.trim().toLowerCase().replace("_", ":").replace("-", ":");
+        if (!normalized.contains(":") && normalized.length() == 12) {
+            return normalized.replaceAll("(.{2})(?!$)", "$1:");
+        }
+        return normalized;
     }
 
     private DeviceEntity autoBindDeviceIfPossible(String macAddress, DeviceReportReqDTO deviceReport) {

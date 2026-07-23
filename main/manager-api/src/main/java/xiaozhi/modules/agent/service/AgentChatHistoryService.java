@@ -71,4 +71,12 @@ public interface AgentChatHistoryService extends IService<AgentChatHistoryEntity
      * @return T：属于 F：不属于
      */
     boolean isAudioOwnedByAgent(String audioId,String agentId);
+
+    /**
+     * 获取智能体最近一条聊天记录时间
+     *
+     * @param agentId 智能体ID
+     * @return 最近聊天时间
+     */
+    java.util.Date getLatestChatTimeByAgentId(String agentId);
 }

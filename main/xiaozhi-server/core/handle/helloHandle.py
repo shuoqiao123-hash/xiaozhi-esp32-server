@@ -39,6 +39,11 @@ wakeup_words_config = WakeupWordsConfig()
 _wakeup_response_lock = asyncio.Lock()
 
 
+def _get_current_tts_voice(conn: "ConnectionHandler") -> str:
+    voice = getattr(conn.tts, "voice_name", None) or getattr(conn.tts, "voice", None)
+    return voice or "default"
+
+
 async def handleHelloMessage(conn: "ConnectionHandler", msg_json):
     """处理hello消息"""
     audio_params = msg_json.get("audio_params")
@@ -85,12 +90,13 @@ async def checkWakeupWords(conn: "ConnectionHandler", text):
     await send_tts_message(conn, "start")
 
     # 获取当前音色
-    voice = getattr(conn.tts, "voice", "default")
-    if not voice:
-        voice = "default"
+    voice = _get_current_tts_voice(conn)
 
-    # 获取唤醒词回复配置
+    # 获取唤醒词回复配置；当前音色没有缓存时，先为当前语言/音色实时生成一份
     response = wakeup_words_config.get_wakeup_response(voice)
+    if not response or not response.get("file_path"):
+        await wakeupWordsResponse(conn, force_voice=voice)
+        response = wakeup_words_config.get_wakeup_response(voice)
     if not response or not response.get("file_path"):
         response = {
             "voice": "default",
@@ -121,14 +127,12 @@ async def checkWakeupWords(conn: "ConnectionHandler", text):
     return True
 
 
-async def wakeupWordsResponse(conn: "ConnectionHandler"):
+async def wakeupWordsResponse(conn: "ConnectionHandler", force_voice: str | None = None):
     if not conn.tts:
         return
 
     try:
-        # 尝试获取锁，如果获取不到就返回
-        if not await _wakeup_response_lock.acquire():
-            return
+        await _wakeup_response_lock.acquire()
 
         # 从预定义回复列表中随机选择一个回复
         result = random.choice(WAKEUP_CONFIG["responses"])
@@ -141,7 +145,7 @@ async def wakeupWordsResponse(conn: "ConnectionHandler"):
             return
 
         # 获取当前音色
-        voice = getattr(conn.tts, "voice", "default")
+        voice = force_voice or _get_current_tts_voice(conn)
 
         # 使用链接的sample_rate
         wav_bytes = opus_datas_to_wav_bytes(tts_result, sample_rate=conn.sample_rate)

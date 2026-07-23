@@ -78,16 +78,16 @@ public class DeviceController {
 
     @GetMapping("/bind/{agentId}")
     @Operation(summary = "获取已绑定设备")
-    @RequiresPermissions("sys:role:normal")
     public Result<List<DeviceEntity>> getUserDevices(@PathVariable String agentId) {
         UserDetail user = SecurityUser.getUser();
-        List<DeviceEntity> devices = deviceService.getUserDevices(user.getId(), agentId);
+        List<DeviceEntity> devices = user.getSuperAdmin() != null && user.getSuperAdmin() == 1
+                ? deviceService.getDevicesByAgentId(agentId)
+                : deviceService.getUserDevices(user.getId(), agentId);
         return new Result<List<DeviceEntity>>().ok(devices);
     }
 
     @PostMapping("/bind/{agentId}")
     @Operation(summary = "设备在线接口")
-    @RequiresPermissions("sys:role:normal")
     public Result<String> forwardToMqttGateway(@PathVariable String agentId, @RequestBody String requestBody) {
         try {
             return new Result<String>().ok(deviceService.getDeviceOnlineData(agentId));

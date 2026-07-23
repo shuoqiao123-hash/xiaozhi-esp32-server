@@ -81,6 +81,10 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         IPage<AgentEntity> page = agentDao.selectPage(
                 getPage(params, "agent_name", true),
                 new QueryWrapper<>());
+        page.getRecords().forEach(agent -> {
+            agent.setDeviceCount(getDeviceCountByAgentId(agent.getId()));
+            agent.setLastConnectedAt(agentChatHistoryService.getLatestChatTimeByAgentId(agent.getId()));
+        });
         return new PageData<>(page.getRecords(), page.getTotal());
     }
 
@@ -202,7 +206,7 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         // 获取 TTS 音色名称
         dto.setTtsVoiceName(timbreModelService.getTimbreNameById(agent.getTtsVoiceId()));
 
-        // 获取智能体最近的最后连接时长
+        // 获取智能体最近的最后连接时间
         dto.setLastConnectedAt(deviceService.getLatestLastConnectionTime(agent.getId()));
 
         // 获取设备数量
@@ -316,27 +320,70 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
             }
             applyTemplateToAgent(existingEntity, template);
         } else {
-            if (dto.getAgentName() != null) {
-                existingEntity.setAgentName(dto.getAgentName());
-            }
-            if (dto.getTtsVoiceId() != null) {
-                existingEntity.setTtsVoiceId(dto.getTtsVoiceId());
-            }
-            if (dto.getLangCode() != null) {
-                existingEntity.setLangCode(dto.getLangCode());
-            }
-            if (dto.getLanguage() != null) {
-                existingEntity.setLanguage(dto.getLanguage());
-            }
-            if (dto.getTtsLanguage() != null) {
-                existingEntity.setTtsLanguage(dto.getTtsLanguage());
-            }
+            applyNormalUserTemplateFields(existingEntity, dto);
         }
 
         existingEntity.setUpdater(user.getId());
         existingEntity.setUpdatedAt(new Date());
         reconcileMemoryStrategy(existingEntity);
         this.updateById(existingEntity);
+    }
+
+    private void applyNormalUserTemplateFields(AgentEntity existingEntity, AgentUpdateDTO dto) {
+        if (dto.getAgentName() != null) {
+            existingEntity.setAgentName(dto.getAgentName());
+        }
+        if (dto.getAsrModelId() != null) {
+            existingEntity.setAsrModelId(dto.getAsrModelId());
+        }
+        if (dto.getVadModelId() != null) {
+            existingEntity.setVadModelId(dto.getVadModelId());
+        }
+        if (dto.getLlmModelId() != null) {
+            existingEntity.setLlmModelId(dto.getLlmModelId());
+        }
+        if (dto.getVllmModelId() != null) {
+            existingEntity.setVllmModelId(dto.getVllmModelId());
+        }
+        if (dto.getTtsModelId() != null) {
+            existingEntity.setTtsModelId(dto.getTtsModelId());
+        }
+        if (dto.getTtsVoiceId() != null) {
+            existingEntity.setTtsVoiceId(dto.getTtsVoiceId());
+        }
+        if (dto.getTtsLanguage() != null) {
+            existingEntity.setTtsLanguage(dto.getTtsLanguage());
+        }
+        if (dto.getTtsVolume() != null) {
+            existingEntity.setTtsVolume(dto.getTtsVolume());
+        }
+        if (dto.getTtsRate() != null) {
+            existingEntity.setTtsRate(dto.getTtsRate());
+        }
+        if (dto.getTtsPitch() != null) {
+            existingEntity.setTtsPitch(dto.getTtsPitch());
+        }
+        if (dto.getMemModelId() != null) {
+            existingEntity.setMemModelId(dto.getMemModelId());
+        }
+        if (dto.getIntentModelId() != null) {
+            existingEntity.setIntentModelId(dto.getIntentModelId());
+        }
+        if (dto.getSystemPrompt() != null) {
+            existingEntity.setSystemPrompt(dto.getSystemPrompt());
+        }
+        if (dto.getSummaryMemory() != null) {
+            existingEntity.setSummaryMemory(dto.getSummaryMemory());
+        }
+        if (dto.getChatHistoryConf() != null) {
+            existingEntity.setChatHistoryConf(dto.getChatHistoryConf());
+        }
+        if (dto.getLangCode() != null) {
+            existingEntity.setLangCode(dto.getLangCode());
+        }
+        if (dto.getLanguage() != null) {
+            existingEntity.setLanguage(dto.getLanguage());
+        }
     }
 
     private void applyFullUpdate(AgentEntity existingEntity, AgentUpdateDTO dto) {

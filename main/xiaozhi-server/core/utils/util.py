@@ -451,7 +451,6 @@ def check_asr_update(before_config, new_config):
         or new_config["selected_module"].get("ASR") is None
     ):
         return False
-    update_asr = False
     current_asr_module = before_config["selected_module"]["ASR"]
     new_asr_module = new_config["selected_module"]["ASR"]
 
@@ -459,19 +458,27 @@ def check_asr_update(before_config, new_config):
     if current_asr_module != new_asr_module:
         return True
 
+    current_asr_config = before_config["ASR"][current_asr_module]
+    new_asr_config = new_config["ASR"][new_asr_module]
+
     # 如果模块名称相同，再比较类型
     current_asr_type = (
         current_asr_module
-        if "type" not in before_config["ASR"][current_asr_module]
-        else before_config["ASR"][current_asr_module]["type"]
+        if "type" not in current_asr_config
+        else current_asr_config["type"]
     )
     new_asr_type = (
         new_asr_module
-        if "type" not in new_config["ASR"][new_asr_module]
-        else new_config["ASR"][new_asr_module]["type"]
+        if "type" not in new_asr_config
+        else new_asr_config["type"]
     )
-    update_asr = current_asr_type != new_asr_type
-    return update_asr
+    if current_asr_type != new_asr_type:
+        return True
+
+    if new_asr_type == "azure_stream_new":
+        return current_asr_config.get("language") != new_asr_config.get("language")
+
+    return False
 
 
 def filter_sensitive_info(config: dict) -> dict:

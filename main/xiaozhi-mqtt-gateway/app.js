@@ -715,7 +715,7 @@ class MQTTConnection {
     }
 
     isAlive() {
-        return this.bridge && this.bridge.isAlive();
+        return !!(this.protocol && this.protocol.isConnected && !this.closing);
     }
 
     // Cache device tools to MQTTConnection

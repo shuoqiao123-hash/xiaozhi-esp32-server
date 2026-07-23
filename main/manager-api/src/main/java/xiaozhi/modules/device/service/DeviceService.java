@@ -11,6 +11,7 @@ import xiaozhi.modules.device.dto.DevicePageUserDTO;
 import xiaozhi.modules.device.dto.DeviceReportReqDTO;
 import xiaozhi.modules.device.dto.DeviceReportRespDTO;
 import xiaozhi.modules.device.entity.DeviceEntity;
+import xiaozhi.modules.device.vo.DeviceStatusVO;
 import xiaozhi.modules.device.vo.UserShowDeviceListVO;
 
 public interface DeviceService extends BaseService<DeviceEntity> {
@@ -29,6 +30,11 @@ public interface DeviceService extends BaseService<DeviceEntity> {
      * 获取用户指定智能体的设备列表，
      */
     List<DeviceEntity> getUserDevices(Long userId, String agentId);
+
+    /**
+     * 按智能体ID获取设备列表
+     */
+    List<DeviceEntity> getDevicesByAgentId(String agentId);
 
     /**
      * 解绑设备
@@ -77,6 +83,11 @@ public interface DeviceService extends BaseService<DeviceEntity> {
      * @return 设备信息
      */
     DeviceEntity getDeviceByMacAddress(String macAddress);
+
+    /**
+     * 根据MAC地址获取设备状态
+     */
+    DeviceStatusVO getDeviceStatusByMacAddress(String macAddress, Long currentUserId, boolean superAdmin);
 
     /**
      * 根据设备ID获取激活码

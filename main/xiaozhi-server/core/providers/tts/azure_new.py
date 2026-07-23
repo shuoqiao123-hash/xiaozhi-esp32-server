@@ -93,9 +93,9 @@ class TTSProvider(TTSProviderBase):
         self.speech_key = config.get("speech_key") or config.get("api_key")
         self.service_region = config.get("service_region") or config.get("region")
         self.voice_name = (
-            config.get("voice_name")
+            config.get("private_voice")
+            or config.get("voice_name")
             or config.get("speaker")
-            or config.get("private_voice")
             or "zh-CN-XiaoxiaoNeural"
         )
 
