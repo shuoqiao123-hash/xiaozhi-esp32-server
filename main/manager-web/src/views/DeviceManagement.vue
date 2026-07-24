@@ -46,6 +46,18 @@
                   {{ Number.isInteger(scope.row.batteryLevel) ? `${scope.row.batteryLevel}%` : '-' }}
                 </template>
               </el-table-column>
+              <el-table-column :label="$t('device.volume')" align="center">
+                <template slot-scope="scope">
+                  <el-button
+                    size="mini"
+                    type="text"
+                    :disabled="scope.row.deviceStatus !== 'online'"
+                    @click="openDeviceVolumeDrawer(scope.row)"
+                  >
+                    {{ scope.row.volumeLoading ? '...' : (Number.isInteger(scope.row.volume) ? `${scope.row.volume}%` : '-') }}
+                  </el-button>
+                </template>
+              </el-table-column>
               <el-table-column :label="$t('device.remark')" align="center">
                 <template #default="{ row }">
                   <el-input v-show="row.isEdit" v-model="row.remark" size="mini" maxlength="64" show-word-limit
@@ -124,6 +136,12 @@
       @refresh="fetchBindDevices(currentAgentId)" />
     <ManualAddDeviceDialog :visible.sync="manualAddDeviceDialogVisible" :agent-id="currentAgentId"
       @refresh="fetchBindDevices(currentAgentId)" />
+    <DeviceVolumeSettings
+      :visible.sync="deviceVolumeDrawerVisible"
+      :volume="currentDeviceVolume"
+      :saving="savingDeviceVolume"
+      @save="handleDeviceVolumeSave"
+    />
 
   </div>
 </template>
@@ -131,6 +149,7 @@
 <script>
 import Api from '@/apis/api';
 import AddDeviceDialog from "@/components/AddDeviceDialog.vue";
+import DeviceVolumeSettings from "@/components/DeviceVolumeSettings.vue";
 import HeaderBar from "@/components/HeaderBar.vue";
 import ManualAddDeviceDialog from "@/components/ManualAddDeviceDialog.vue";
 
@@ -138,7 +157,8 @@ export default {
   components: {
     HeaderBar,
     AddDeviceDialog,
-    ManualAddDeviceDialog
+    ManualAddDeviceDialog,
+    DeviceVolumeSettings
   },
   data() {
     return {
@@ -148,6 +168,10 @@ export default {
       searchKeyword: "",
       activeSearchKeyword: "",
       currentAgentId: this.$route.query.agentId || '',
+      deviceVolumeDrawerVisible: false,
+      currentVolumeDevice: null,
+      currentDeviceVolume: 50,
+      savingDeviceVolume: false,
       currentPage: 1,
       pageSize: 10,
       pageSizeOptions: [10, 20, 50, 100],
@@ -286,6 +310,34 @@ export default {
     handleManualAddDevice() {
       this.manualAddDeviceDialogVisible = true;
     },
+    openDeviceVolumeDrawer(row) {
+      this.currentVolumeDevice = row;
+      this.currentDeviceVolume = Number.isInteger(row.volume) ? row.volume : 50;
+      this.deviceVolumeDrawerVisible = true;
+    },
+    handleDeviceVolumeSave(volume) {
+      if (!this.currentVolumeDevice) {
+        return;
+      }
+
+      this.savingDeviceVolume = true;
+      Api.device.callDeviceTool(this.currentVolumeDevice.device_id, {
+        name: 'self.audio_speaker.set_volume',
+        arguments: {
+          volume
+        }
+      }, ({ data }) => {
+        this.savingDeviceVolume = false;
+        if (data.code === 0) {
+          this.currentDeviceVolume = volume;
+          this.updateDeviceVolume(this.currentVolumeDevice.device_id, volume);
+          this.deviceVolumeDrawerVisible = false;
+          this.$message.success(this.$t('device.volumeAdjustSuccess'));
+        } else {
+          this.$message.error(data.msg || this.$t('device.volumeAdjustFailed'));
+        }
+      });
+    },
     submitRemark(row) {
       if (row._submitting) return;
 
@@ -369,12 +421,15 @@ export default {
       Api.device.getAgentBindDevices(agentId, ({ data }) => {
         this.loading = false;
         if (data.code === 0) {
-          this.deviceList = data.data.map(device => {
+          const bindDevices = data.data || [];
+          this.deviceList = bindDevices.map(device => {
             return {
               device_id: device.id,
               model: device.board,
               firmwareVersion: device.appVersion,
               batteryLevel: device.batteryLevel,
+              volume: null,
+              volumeLoading: false,
               macAddress: device.macAddress,
               bindTime: device.createDate,
               lastConversation: device.lastConnectedAt,
@@ -393,6 +448,7 @@ export default {
           this.activeSearchKeyword = "";
           this.searchKeyword = "";
 
+          this.fetchDeviceVolumes();
           // 获取设备列表后，立即获取设备状态
           this.fetchDeviceStatus(agentId);
         } else {
@@ -421,6 +477,65 @@ export default {
           }
         }
       });
+    },
+    fetchDeviceVolumes() {
+      this.deviceList.forEach(device => {
+        device.volumeLoading = true;
+        Api.device.callDeviceTool(device.device_id, {
+          name: 'self.get_device_status',
+          arguments: {}
+        }, ({ data }) => {
+          device.volumeLoading = false;
+          if (data.code !== 0 || !data.data) {
+            return;
+          }
+
+          const result = data.data;
+          const volume = this.extractDeviceVolume(result);
+          this.updateDeviceVolume(device.device_id, volume);
+        });
+      });
+    },
+    extractDeviceVolume(result) {
+      if (!result) {
+        return null;
+      }
+
+      let normalizedResult = result;
+      if (typeof normalizedResult === 'string') {
+        try {
+          normalizedResult = JSON.parse(normalizedResult);
+        } catch (error) {
+          return null;
+        }
+      }
+
+      const directVolume = normalizedResult?.audio_speaker?.volume;
+      if (Number.isInteger(directVolume)) {
+        return directVolume;
+      }
+
+      const textContent = Array.isArray(normalizedResult?.content)
+        ? normalizedResult.content.find(item => item?.type === 'text')?.text
+        : null;
+      if (typeof textContent === 'string') {
+        try {
+          const parsedText = JSON.parse(textContent);
+          const parsedVolume = parsedText?.audio_speaker?.volume;
+          return Number.isInteger(parsedVolume) ? parsedVolume : null;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      return null;
+    },
+    updateDeviceVolume(deviceId, volume) {
+      const targetDevice = this.deviceList.find(device => device.device_id === deviceId);
+      if (!targetDevice) {
+        return;
+      }
+      this.$set(targetDevice, 'volume', Number.isInteger(volume) ? volume : null);
     },
 
     // 根据API响应更新设备状态

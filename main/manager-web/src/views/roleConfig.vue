@@ -73,7 +73,10 @@
                           v-for="(template, index) in templates"
                           :key="`template-${index}`"
                           class="template-item"
-                          :class="{ 'template-loading': loadingTemplate }"
+                          :class="{
+                            'template-loading': loadingTemplate,
+                            'template-item-active': selectedTemplateId === template.id
+                          }"
                           @click="selectTemplate(template)"
                         >
                           {{ template.agentName }}
@@ -447,7 +450,8 @@ export default {
       dynamicTags: [],
       inputVisible: false,
       inputValue: '',
-      selectedTemplateId: null
+      selectedTemplateId: null,
+      templateChanged: false
     };
   },
   computed: {
@@ -478,7 +482,6 @@ export default {
           ttsLanguage: this.selectedLanguage,
           langCode: this.form.langCode,
           language: this.form.language,
-          templateId: this.selectedTemplateId,
         };
       } else {
         configData = {
@@ -518,9 +521,14 @@ export default {
           configData.ttsPitch = this.form.ttsPitch;
         }
       }
+
+      if (this.templateChanged && this.selectedTemplateId) {
+        configData.templateId = this.selectedTemplateId;
+      }
+
       Api.agent.updateAgentConfig(this.$route.query.agentId, configData, ({ data }) => {
         if (data.code === 0) {
-          this.selectedTemplateId = null;
+          this.templateChanged = false;
           this.$message.success({
             message: i18n.t("roleConfig.saveSuccess"),
             showClose: true,
@@ -584,6 +592,7 @@ export default {
       this.loadingTemplate = true;
       try {
         this.selectedTemplateId = template.id;
+        this.templateChanged = true;
         this.applyTemplateData(template);
         this.$message.success({
           message: `${template.agentName}${i18n.t("roleConfig.templateApplied")}`,
@@ -635,6 +644,9 @@ export default {
               intentModelId: data.data.intentModelId,
             },
           };
+
+          this.selectedTemplateId = data.data.templateId || null;
+          this.templateChanged = false;
 
           // 同步TTS设置到ttsSettings
           this.ttsSettings = {
@@ -1541,6 +1553,16 @@ export default {
 
 .template-item:hover {
   background-color: #d0d8ff;
+}
+
+.template-item-active {
+  background: #5778ff;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(87, 120, 255, 0.25);
+}
+
+.template-item-active:hover {
+  background: #4c6fff;
 }
 
 .model-select-wrapper {

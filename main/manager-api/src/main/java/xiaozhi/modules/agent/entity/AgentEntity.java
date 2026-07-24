@@ -81,6 +81,9 @@ public class AgentEntity {
     @Schema(description = "交互语种")
     private String language;
 
+    @Schema(description = "当前模板ID")
+    private String templateId;
+
     @Schema(description = "排序")
     private Integer sort;
 

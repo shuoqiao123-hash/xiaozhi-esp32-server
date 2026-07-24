@@ -31,6 +31,7 @@
         <result column="summaryMemory" property="summaryMemory"/>
         <result column="langCode" property="langCode"/>
         <result column="language" property="language"/>
+        <result column="templateId" property="templateId"/>
         <result column="sort" property="sort"/>
         <result column="creator" property="creator"/>
         <result column="createdAt" property="createdAt"/>
@@ -73,6 +74,7 @@
                a.summary_memory    AS summaryMemory,
                a.lang_code         AS langCode,
                a.language          AS language,
+               a.template_id       AS templateId,
                a.sort,
                a.creator,
                a.created_at        AS createdAt,

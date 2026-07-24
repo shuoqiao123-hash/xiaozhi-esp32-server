@@ -105,4 +105,23 @@ export default {
                 });
             }).send();
     },
+    callDeviceTool(deviceId, payload, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/device/tools/call/${deviceId}`)
+            .method('POST')
+            .data(payload)
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .fail((res) => {
+                callback(res);
+            })
+            .networkFail((err) => {
+                console.error('调用设备工具失败:', err);
+                RequestService.reAjaxFun(() => {
+                    this.callDeviceTool(deviceId, payload, callback);
+                });
+            }).send();
+    },
 }

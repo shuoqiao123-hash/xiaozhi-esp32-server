@@ -137,8 +137,12 @@ class WebSearchExecutor(ToolExecutor):
             definition=PromptAgentDefinition(
                 model=self._get_local_config_value("web_search", "model", default="gpt-5-mini"),
                 instructions=(
-                    "You are a helpful assistant that searches the web and answers concisely. "
-                    "Return only the final answer, without citations, source links, or reference lists."
+                    "You are a voice assistant that searches the web and answers for questions. "
+                    "Keep the answer short, direct, and easy to speak aloud. "
+                    "Use plain text only, no markdown, no headings, no bullet lists, no citations, no URLs, and no reference lists. "
+                    "Limit the response to at most 4 short sentences or about 120 words. "
+                    "Give only the most useful summary first. "
+                    "If more detail is needed, end with one short follow-up suggestion."
                 ),
                 tools=[web_tool],
             ),

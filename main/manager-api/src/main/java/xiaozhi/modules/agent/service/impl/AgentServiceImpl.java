@@ -319,71 +319,29 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
                 throw new RenException("模板不存在");
             }
             applyTemplateToAgent(existingEntity, template);
+            existingEntity.setTemplateId(dto.getTemplateId());
         } else {
-            applyNormalUserTemplateFields(existingEntity, dto);
+            if (dto.getAgentName() != null) {
+                existingEntity.setAgentName(dto.getAgentName());
+            }
+            if (dto.getTtsVoiceId() != null) {
+                existingEntity.setTtsVoiceId(dto.getTtsVoiceId());
+            }
+            if (dto.getLangCode() != null) {
+                existingEntity.setLangCode(dto.getLangCode());
+            }
+            if (dto.getLanguage() != null) {
+                existingEntity.setLanguage(dto.getLanguage());
+            }
+            if (dto.getTtsLanguage() != null) {
+                existingEntity.setTtsLanguage(dto.getTtsLanguage());
+            }
         }
 
         existingEntity.setUpdater(user.getId());
         existingEntity.setUpdatedAt(new Date());
         reconcileMemoryStrategy(existingEntity);
         this.updateById(existingEntity);
-    }
-
-    private void applyNormalUserTemplateFields(AgentEntity existingEntity, AgentUpdateDTO dto) {
-        if (dto.getAgentName() != null) {
-            existingEntity.setAgentName(dto.getAgentName());
-        }
-        if (dto.getAsrModelId() != null) {
-            existingEntity.setAsrModelId(dto.getAsrModelId());
-        }
-        if (dto.getVadModelId() != null) {
-            existingEntity.setVadModelId(dto.getVadModelId());
-        }
-        if (dto.getLlmModelId() != null) {
-            existingEntity.setLlmModelId(dto.getLlmModelId());
-        }
-        if (dto.getVllmModelId() != null) {
-            existingEntity.setVllmModelId(dto.getVllmModelId());
-        }
-        if (dto.getTtsModelId() != null) {
-            existingEntity.setTtsModelId(dto.getTtsModelId());
-        }
-        if (dto.getTtsVoiceId() != null) {
-            existingEntity.setTtsVoiceId(dto.getTtsVoiceId());
-        }
-        if (dto.getTtsLanguage() != null) {
-            existingEntity.setTtsLanguage(dto.getTtsLanguage());
-        }
-        if (dto.getTtsVolume() != null) {
-            existingEntity.setTtsVolume(dto.getTtsVolume());
-        }
-        if (dto.getTtsRate() != null) {
-            existingEntity.setTtsRate(dto.getTtsRate());
-        }
-        if (dto.getTtsPitch() != null) {
-            existingEntity.setTtsPitch(dto.getTtsPitch());
-        }
-        if (dto.getMemModelId() != null) {
-            existingEntity.setMemModelId(dto.getMemModelId());
-        }
-        if (dto.getIntentModelId() != null) {
-            existingEntity.setIntentModelId(dto.getIntentModelId());
-        }
-        if (dto.getSystemPrompt() != null) {
-            existingEntity.setSystemPrompt(dto.getSystemPrompt());
-        }
-        if (dto.getSummaryMemory() != null) {
-            existingEntity.setSummaryMemory(dto.getSummaryMemory());
-        }
-        if (dto.getChatHistoryConf() != null) {
-            existingEntity.setChatHistoryConf(dto.getChatHistoryConf());
-        }
-        if (dto.getLangCode() != null) {
-            existingEntity.setLangCode(dto.getLangCode());
-        }
-        if (dto.getLanguage() != null) {
-            existingEntity.setLanguage(dto.getLanguage());
-        }
     }
 
     private void applyFullUpdate(AgentEntity existingEntity, AgentUpdateDTO dto) {
@@ -446,6 +404,9 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         }
         if (dto.getSort() != null) {
             existingEntity.setSort(dto.getSort());
+        }
+        if (dto.getTemplateId() != null) {
+            existingEntity.setTemplateId(dto.getTemplateId());
         }
     }
 
@@ -539,6 +500,7 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         existingEntity.setLangCode(template.getLangCode());
         existingEntity.setLanguage(template.getLanguage());
         existingEntity.setSort(template.getSort());
+        existingEntity.setTemplateId(template.getId());
     }
 
     /**
