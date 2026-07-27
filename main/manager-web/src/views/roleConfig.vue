@@ -332,7 +332,6 @@
                           <el-button
                             class="edit-function-btn"
                             style="margin-left: 10px;"
-                            :disabled="isNormalUserReadonly"
                             @click="openTtsAdvancedSettings"
                           >
                             {{ $t('roleConfig.advancedSettings') }}
@@ -388,7 +387,6 @@ export default {
       showContextProviderDialog: false,
       showTtsAdvancedDialog: false,
       ttsSettings: {
-        volume: 0,
         speed: 0,
         pitch: 0
       },
@@ -483,6 +481,13 @@ export default {
           langCode: this.form.langCode,
           language: this.form.language,
         };
+
+        if (this.form.ttsRate !== null && this.form.ttsRate !== undefined) {
+          configData.ttsRate = this.form.ttsRate;
+        }
+        if (this.form.ttsPitch !== null && this.form.ttsPitch !== undefined) {
+          configData.ttsPitch = this.form.ttsPitch;
+        }
       } else {
         configData = {
           agentCode: this.form.agentCode,
@@ -511,9 +516,6 @@ export default {
           contextProviders: this.currentContextProviders,
         };
 
-        if (this.form.ttsVolume !== null && this.form.ttsVolume !== undefined) {
-          configData.ttsVolume = this.form.ttsVolume;
-        }
         if (this.form.ttsRate !== null && this.form.ttsRate !== undefined) {
           configData.ttsRate = this.form.ttsRate;
         }
@@ -650,7 +652,6 @@ export default {
 
           // 同步TTS设置到ttsSettings
           this.ttsSettings = {
-            volume: this.form.ttsVolume || 0,
             speed: this.form.ttsRate || 0,
             pitch: this.form.ttsPitch || 0
           };
@@ -822,7 +823,6 @@ export default {
 
       // 同步到ttsSettings（如果值为null，使用0作为显示默认值，但不修改form中的值）
       this.ttsSettings = {
-        volume: this.form.ttsVolume !== null && this.form.ttsVolume !== undefined ? this.form.ttsVolume : 0,
         speed: this.form.ttsRate !== null && this.form.ttsRate !== undefined ? this.form.ttsRate : 0,
         pitch: this.form.ttsPitch !== null && this.form.ttsPitch !== undefined ? this.form.ttsPitch : 0
       };
@@ -902,17 +902,10 @@ export default {
       this.showContextProviderDialog = true;
     },
     openTtsAdvancedSettings() {
-      if (this.isNormalUserReadonly) {
-        return;
-      }
       this.showTtsAdvancedDialog = true;
     },
     handleTtsSettingsSave(settings) {
-      if (this.isNormalUserReadonly) {
-        return;
-      }
       this.ttsSettings = { ...settings };
-      this.form.ttsVolume = settings.volume;
       this.form.ttsRate = settings.speed;
       this.form.ttsPitch = settings.pitch;
     },

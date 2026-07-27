@@ -15,21 +15,6 @@
 
     <div class="drawer-content">
       <el-form label-position="top">
-        <!-- 音量 -->
-        <el-form-item :label="$t('roleConfig.ttsVolume')">
-          <div class="slider-container">
-            <el-slider
-              v-model="localSettings.volume"
-              :min="-100"
-              :max="100"
-              :step="1"
-              :format-tooltip="formatTooltip"
-              class="tts-slider"
-            />
-            <span class="slider-hint">{{ $t('roleConfig.volumeHint') }}</span>
-          </div>
-        </el-form-item>
-
         <!-- 语速 -->
         <el-form-item :label="$t('roleConfig.ttsRate')">
           <div class="slider-container">
@@ -80,7 +65,6 @@ export default {
     settings: {
       type: Object,
       default: () => ({
-        volume: 0,
         speed: 0,
         pitch: 0
       })
@@ -89,7 +73,6 @@ export default {
   data() {
     return {
       localSettings: {
-        volume: 0,
         speed: 0,
         pitch: 0
       }

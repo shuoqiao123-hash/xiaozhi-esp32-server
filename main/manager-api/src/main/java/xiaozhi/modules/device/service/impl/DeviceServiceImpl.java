@@ -217,6 +217,8 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
         DeviceEntity deviceById = getDeviceByMacAddress(macAddress);
         if (deviceById == null) {
             deviceById = autoBindDeviceIfPossible(macAddress, deviceReport);
+        } else {
+            deviceById = autoRebindDeviceIfPossible(deviceById, macAddress, deviceReport);
         }
 
         // 设备未绑定，则返回当前上传的固件信息（不更新）以此兼容旧固件版本
@@ -463,49 +465,133 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
         }
 
         try {
-            SysUserTokenEntity userToken = sysUserTokenDao.getByToken(token);
-            if (userToken == null || userToken.getExpireDate() == null || userToken.getExpireDate().before(new Date())) {
+            RebindContext context = resolveAutoBindContext(token);
+            if (context == null) {
                 return null;
             }
 
-            SysUserEntity user = sysUserDao.selectById(userToken.getUserId());
-            if (user == null || user.getId() == null) {
-                return null;
-            }
-
-            QueryWrapper<AgentEntity> wrapper = new QueryWrapper<>();
-            wrapper.eq("user_id", user.getId());
-            List<AgentEntity> agents = agentDao.selectList(wrapper);
-            if (agents == null || agents.size() != 1) {
-                log.info("skip auto bind for macAddress={}, reason=agent_count_not_one, userId={}, agentCount={}",
-                        macAddress, user.getId(), agents == null ? 0 : agents.size());
-                return null;
-            }
-
-            AgentEntity agent = agents.get(0);
             Date now = new Date();
             DeviceEntity entity = new DeviceEntity();
             entity.setId(macAddress);
-            entity.setUserId(user.getId());
-            entity.setAgentId(agent.getId());
-            entity.setBoard(deviceReport.getBoard() != null && deviceReport.getBoard().getType() != null
-                    ? deviceReport.getBoard().getType()
-                    : (deviceReport.getChipModelName() != null ? deviceReport.getChipModelName() : "unknown"));
+            entity.setUserId(context.getUser().getId());
+            entity.setAgentId(context.getAgent().getId());
+            entity.setBoard(resolveBoardType(deviceReport));
             entity.setAppVersion(deviceReport.getApplication() != null ? deviceReport.getApplication().getVersion() : null);
             entity.setMacAddress(macAddress);
             entity.setCreateDate(now);
             entity.setUpdateDate(now);
             entity.setLastConnectedAt(now);
-            entity.setCreator(user.getId());
-            entity.setUpdater(user.getId());
+            entity.setCreator(context.getUser().getId());
+            entity.setUpdater(context.getUser().getId());
             entity.setAutoUpdate(1);
             deviceDao.insert(entity);
-            redisUtils.delete(RedisKeys.getAgentDeviceCountById(agent.getId()));
-            log.info("auto bound device macAddress={} to userId={} agentId={}", macAddress, user.getId(), agent.getId());
+            redisUtils.delete(RedisKeys.getAgentDeviceCountById(context.getAgent().getId()));
+            log.info("auto bound device macAddress={} to userId={} agentId={}", macAddress, context.getUser().getId(), context.getAgent().getId());
             return entity;
         } catch (Exception e) {
             log.warn("auto bind skipped for macAddress={}, reason={}", macAddress, e.getMessage());
             return null;
+        }
+    }
+
+    private DeviceEntity autoRebindDeviceIfPossible(DeviceEntity existingDevice, String macAddress,
+            DeviceReportReqDTO deviceReport) {
+        String token = extractAuthorizationToken();
+        if (StringUtils.isBlank(token)) {
+            return existingDevice;
+        }
+
+        try {
+            RebindContext context = resolveAutoBindContext(token);
+            if (context == null) {
+                return existingDevice;
+            }
+
+            Long newUserId = context.getUser().getId();
+            if (newUserId == null || newUserId.equals(existingDevice.getUserId())) {
+                return existingDevice;
+            }
+
+            Long oldUserId = existingDevice.getUserId();
+            String oldAgentId = existingDevice.getAgentId();
+            String newAgentId = context.getAgent().getId();
+            Date now = new Date();
+
+            existingDevice.setUserId(newUserId);
+            existingDevice.setAgentId(newAgentId);
+            existingDevice.setAlias(null);
+            existingDevice.setBoard(resolveBoardType(deviceReport));
+            existingDevice.setAppVersion(deviceReport.getApplication() != null ? deviceReport.getApplication().getVersion() : null);
+            existingDevice.setLastConnectedAt(now);
+            existingDevice.setUpdateDate(now);
+            existingDevice.setUpdater(newUserId);
+            deviceDao.updateById(existingDevice);
+
+            if (StringUtils.isNotBlank(oldAgentId)) {
+                redisUtils.delete(RedisKeys.getAgentDeviceCountById(oldAgentId));
+                redisUtils.delete(RedisKeys.getAgentDeviceLastConnectedAtById(oldAgentId));
+            }
+            if (StringUtils.isNotBlank(newAgentId)) {
+                redisUtils.delete(RedisKeys.getAgentDeviceCountById(newAgentId));
+                redisUtils.delete(RedisKeys.getAgentDeviceLastConnectedAtById(newAgentId));
+            }
+
+            log.info("auto rebound device macAddress={} from userId={} agentId={} to userId={} agentId={}",
+                    macAddress, oldUserId, oldAgentId, newUserId, newAgentId);
+            return existingDevice;
+        } catch (Exception e) {
+            log.warn("auto rebind skipped for macAddress={}, reason={}", macAddress, e.getMessage());
+            return existingDevice;
+        }
+    }
+
+    private RebindContext resolveAutoBindContext(String token) {
+        SysUserTokenEntity userToken = sysUserTokenDao.getByToken(token);
+        if (userToken == null || userToken.getExpireDate() == null || userToken.getExpireDate().before(new Date())) {
+            return null;
+        }
+
+        SysUserEntity user = sysUserDao.selectById(userToken.getUserId());
+        if (user == null || user.getId() == null) {
+            return null;
+        }
+        if (user.getSuperAdmin() != null && user.getSuperAdmin() == 1) {
+            return null;
+        }
+
+        QueryWrapper<AgentEntity> wrapper = new QueryWrapper<>();
+        wrapper.eq("user_id", user.getId());
+        List<AgentEntity> agents = agentDao.selectList(wrapper);
+        if (agents == null || agents.size() != 1) {
+            log.info("skip auto bind for userId={}, reason=agent_count_not_one, agentCount={}",
+                    user.getId(), agents == null ? 0 : agents.size());
+            return null;
+        }
+
+        return new RebindContext(user, agents.get(0));
+    }
+
+    private String resolveBoardType(DeviceReportReqDTO deviceReport) {
+        return deviceReport.getBoard() != null && deviceReport.getBoard().getType() != null
+                ? deviceReport.getBoard().getType()
+                : (deviceReport.getChipModelName() != null ? deviceReport.getChipModelName() : "unknown");
+    }
+
+    private static class RebindContext {
+        private final SysUserEntity user;
+        private final AgentEntity agent;
+
+        RebindContext(SysUserEntity user, AgentEntity agent) {
+            this.user = user;
+            this.agent = agent;
+        }
+
+        SysUserEntity getUser() {
+            return user;
+        }
+
+        AgentEntity getAgent() {
+            return agent;
         }
     }
 
@@ -877,9 +963,11 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
             return null;
         }
 
-        // 检查设备是否属于当前用户
+        // 检查设备是否属于当前用户，管理员仅允许只读状态查询
         UserDetail user = SecurityUser.getUser();
-        if (!device.getUserId().equals(user.getId())) {
+        boolean isSuperAdmin = user.getSuperAdmin() != null && user.getSuperAdmin() == 1;
+        boolean isOwner = device.getUserId().equals(user.getId());
+        if (!isOwner) {
             return null;
         }
 
@@ -983,9 +1071,12 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
             return null;
         }
 
-        // 检查设备是否属于当前用户
+        // 检查设备是否属于当前用户，管理员仅允许只读状态查询
         UserDetail user = SecurityUser.getUser();
-        if (!device.getUserId().equals(user.getId())) {
+        boolean isSuperAdmin = user.getSuperAdmin() != null && user.getSuperAdmin() == 1;
+        boolean isOwner = device.getUserId().equals(user.getId());
+        boolean isReadOnlyStatusQuery = "self.get_device_status".equals(toolName);
+        if (!isOwner && !(isSuperAdmin && isReadOnlyStatusQuery)) {
             return null;
         }
 

@@ -320,22 +320,28 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
             }
             applyTemplateToAgent(existingEntity, template);
             existingEntity.setTemplateId(dto.getTemplateId());
-        } else {
-            if (dto.getAgentName() != null) {
-                existingEntity.setAgentName(dto.getAgentName());
-            }
-            if (dto.getTtsVoiceId() != null) {
-                existingEntity.setTtsVoiceId(dto.getTtsVoiceId());
-            }
-            if (dto.getLangCode() != null) {
-                existingEntity.setLangCode(dto.getLangCode());
-            }
-            if (dto.getLanguage() != null) {
-                existingEntity.setLanguage(dto.getLanguage());
-            }
-            if (dto.getTtsLanguage() != null) {
-                existingEntity.setTtsLanguage(dto.getTtsLanguage());
-            }
+        }
+
+        if (dto.getAgentName() != null) {
+            existingEntity.setAgentName(dto.getAgentName());
+        }
+        if (dto.getTtsVoiceId() != null) {
+            existingEntity.setTtsVoiceId(dto.getTtsVoiceId());
+        }
+        if (dto.getLangCode() != null) {
+            existingEntity.setLangCode(dto.getLangCode());
+        }
+        if (dto.getLanguage() != null) {
+            existingEntity.setLanguage(dto.getLanguage());
+        }
+        if (dto.getTtsLanguage() != null) {
+            existingEntity.setTtsLanguage(dto.getTtsLanguage());
+        }
+        if (dto.getTtsRate() != null) {
+            existingEntity.setTtsRate(dto.getTtsRate());
+        }
+        if (dto.getTtsPitch() != null) {
+            existingEntity.setTtsPitch(dto.getTtsPitch());
         }
 
         existingEntity.setUpdater(user.getId());

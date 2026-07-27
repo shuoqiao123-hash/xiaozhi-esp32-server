@@ -31,24 +31,28 @@
               </el-table-column>
               <el-table-column :label="$t('device.firmwareVersion')" prop="firmwareVersion"
                 align="center"></el-table-column>
-              <el-table-column :label="$t('device.macAddress')" prop="macAddress" align="center"></el-table-column>
-              <el-table-column :label="$t('device.bindTime')" prop="bindTime" align="center"></el-table-column>
+              <el-table-column :label="$t('device.macAddress')" prop="macAddress" align="center" min-width="160"></el-table-column>
+              <el-table-column :label="$t('device.bindTime')" prop="bindTime" align="center" min-width="180"></el-table-column>
               <el-table-column :label="$t('device.lastConversation')" prop="lastConversation"
-                align="center"></el-table-column>
-              <el-table-column :label="$t('device.deviceStatus')" prop="deviceStatus" align="center">
+                align="center" min-width="180"></el-table-column>
+              <el-table-column :label="$t('device.deviceStatus')" prop="deviceStatus" align="center" width="100">
                 <template slot-scope="scope">
                   <el-tag v-if="scope.row.deviceStatus === 'online'" type="success">{{ $t('device.online') }}</el-tag>
                   <el-tag v-else type="danger">{{ $t('device.offline') }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column :label="$t('device.batteryLevel')" prop="batteryLevel" align="center">
+              <el-table-column :label="$t('device.batteryLevel')" prop="batteryLevel" align="center" width="100">
                 <template slot-scope="scope">
                   {{ Number.isInteger(scope.row.batteryLevel) ? `${scope.row.batteryLevel}%` : '-' }}
                 </template>
               </el-table-column>
-              <el-table-column :label="$t('device.volume')" align="center">
+              <el-table-column :label="$t('device.volume')" align="center" width="90">
                 <template slot-scope="scope">
+                  <template v-if="isSuperAdmin">
+                    <span>{{ scope.row.volumeLoading ? '...' : (Number.isInteger(scope.row.volume) ? `${scope.row.volume}%` : '-') }}</span>
+                  </template>
                   <el-button
+                    v-else
                     size="mini"
                     type="text"
                     :disabled="scope.row.deviceStatus !== 'online'"
@@ -70,13 +74,13 @@
                   </span>
                 </template>
               </el-table-column>
-              <el-table-column :label="$t('device.autoUpdate')" align="center">
+              <el-table-column :label="$t('device.autoUpdate')" align="center" width="100">
                 <template slot-scope="scope">
                   <el-switch v-model="scope.row.otaSwitch" size="mini" active-color="#13ce66" inactive-color="#ff4949"
                     @change="handleOtaSwitchChange(scope.row)"></el-switch>
                 </template>
               </el-table-column>
-              <el-table-column :label="$t('device.operation')" align="center">
+              <el-table-column :label="$t('device.operation')" align="center" min-width="140">
                 <template slot-scope="scope">
                   <el-button size="mini" type="text" @click="handleUnbind(scope.row.device_id)">
                     {{ $t('device.unbind') }}
